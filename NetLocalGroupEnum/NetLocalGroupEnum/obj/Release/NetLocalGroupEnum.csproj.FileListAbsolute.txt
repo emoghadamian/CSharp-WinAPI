@@ -1,6 +1,0 @@
-C:\Users\snapp\source\repos\NetLocalGroupEnum\NetLocalGroupEnum\bin\Release\NetLocalGroupEnum.exe.config
-C:\Users\snapp\source\repos\NetLocalGroupEnum\NetLocalGroupEnum\bin\Release\NetLocalGroupEnum.exe
-C:\Users\snapp\source\repos\NetLocalGroupEnum\NetLocalGroupEnum\bin\Release\NetLocalGroupEnum.pdb
-C:\Users\snapp\source\repos\NetLocalGroupEnum\NetLocalGroupEnum\obj\Release\NetLocalGroupEnum.csproj.CoreCompileInputs.cache
-C:\Users\snapp\source\repos\NetLocalGroupEnum\NetLocalGroupEnum\obj\Release\NetLocalGroupEnum.exe
-C:\Users\snapp\source\repos\NetLocalGroupEnum\NetLocalGroupEnum\obj\Release\NetLocalGroupEnum.pdb

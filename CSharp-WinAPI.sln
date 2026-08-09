@@ -1,0 +1,42 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CSharp.WinAPI", "src\CSharp.WinAPI\CSharp.WinAPI.csproj", "{A8EA48A6-5E0D-44E1-8DC4-C6C0A3B2F016}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LocalGroupInspection", "examples\security\LocalGroupInspection\LocalGroupInspection.csproj", "{3A9A16CB-8822-4BD0-A534-61D4B6CFBC48}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "01-DllImport", "examples\learning\01-dllimport\01-DllImport.csproj", "{6CDAF23A-296F-49CC-8C9F-C8D5F4AC2EF1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "02-LibraryImport", "examples\learning\02-libraryimport\02-LibraryImport.csproj", "{D5893F6E-625E-4A36-A247-10162592D4AA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CSharp.WinAPI.Tests", "tests\CSharp.WinAPI.Tests\CSharp.WinAPI.Tests.csproj", "{4AB2A2BE-ED81-41CA-9A2A-68D8502FD10F}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A8EA48A6-5E0D-44E1-8DC4-C6C0A3B2F016}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A8EA48A6-5E0D-44E1-8DC4-C6C0A3B2F016}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A8EA48A6-5E0D-44E1-8DC4-C6C0A3B2F016}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A8EA48A6-5E0D-44E1-8DC4-C6C0A3B2F016}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3A9A16CB-8822-4BD0-A534-61D4B6CFBC48}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3A9A16CB-8822-4BD0-A534-61D4B6CFBC48}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3A9A16CB-8822-4BD0-A534-61D4B6CFBC48}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3A9A16CB-8822-4BD0-A534-61D4B6CFBC48}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6CDAF23A-296F-49CC-8C9F-C8D5F4AC2EF1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6CDAF23A-296F-49CC-8C9F-C8D5F4AC2EF1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6CDAF23A-296F-49CC-8C9F-C8D5F4AC2EF1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6CDAF23A-296F-49CC-8C9F-C8D5F4AC2EF1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D5893F6E-625E-4A36-A247-10162592D4AA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D5893F6E-625E-4A36-A247-10162592D4AA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D5893F6E-625E-4A36-A247-10162592D4AA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D5893F6E-625E-4A36-A247-10162592D4AA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4AB2A2BE-ED81-41CA-9A2A-68D8502FD10F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4AB2A2BE-ED81-41CA-9A2A-68D8502FD10F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4AB2A2BE-ED81-41CA-9A2A-68D8502FD10F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4AB2A2BE-ED81-41CA-9A2A-68D8502FD10F}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
