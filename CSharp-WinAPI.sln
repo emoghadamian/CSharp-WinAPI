@@ -12,6 +12,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "02-LibraryImport", "example
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CSharp.WinAPI.Tests", "tests\CSharp.WinAPI.Tests\CSharp.WinAPI.Tests.csproj", "{4AB2A2BE-ED81-41CA-9A2A-68D8502FD10F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProcessEnumeration", "examples\processes\ProcessEnumeration\ProcessEnumeration.csproj", "{B74B114B-4A5C-468F-A2AF-43E1A6D8D676}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -38,5 +40,9 @@ Global
 		{4AB2A2BE-ED81-41CA-9A2A-68D8502FD10F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4AB2A2BE-ED81-41CA-9A2A-68D8502FD10F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4AB2A2BE-ED81-41CA-9A2A-68D8502FD10F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B74B114B-4A5C-468F-A2AF-43E1A6D8D676}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B74B114B-4A5C-468F-A2AF-43E1A6D8D676}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B74B114B-4A5C-468F-A2AF-43E1A6D8D676}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B74B114B-4A5C-468F-A2AF-43E1A6D8D676}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

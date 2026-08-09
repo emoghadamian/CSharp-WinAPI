@@ -9,7 +9,8 @@
 ## Intermediate
 
 - local-group enumeration and membership inspection
-- process enumeration, process handles, modules, and threads
+- process enumeration, safe process handles, image paths, sessions, and architecture
+- modules and threads
 - service and registry inspection
 
 ## Advanced

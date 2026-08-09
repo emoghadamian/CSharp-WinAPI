@@ -27,7 +27,7 @@ See [DllImport vs LibraryImport](docs/interop/dllimport-vs-libraryimport.md).
 
 ## 🧩 P/Invoke
 
-`src/CSharp.WinAPI/Interop` contains raw declarations only. Managed logic lives separately in `src/CSharp.WinAPI/LocalGroups`; no application flow is embedded in native declarations.
+`src/CSharp.WinAPI/Interop` contains raw declarations only. Managed logic lives separately in `src/CSharp.WinAPI/LocalGroups` and `src/CSharp.WinAPI/Processes`; no application flow is embedded in native declarations.
 
 ## ⚙️ Win32 APIs
 
@@ -36,16 +36,20 @@ The first module uses `Netapi32.dll`:
 - `NetLocalGroupEnum` enumerates local groups using `LOCALGROUP_INFO_0`.
 - `NetLocalGroupGetMembers` returns `LOCALGROUP_MEMBERS_INFO_2` member data.
 - `NetApiBufferFree` releases every system-owned result buffer through a SafeHandle.
+- Toolhelp32 process APIs enumerate PID, parent PID, and executable names.
+- Kernel32 query APIs provide image path, creation time, session, and architecture when allowed.
 
 Both enumeration APIs preserve their `NET_API_STATUS` return code in `NetApiException`; they do not substitute `GetLastError`.
 
 ## 🧠 Windows Internals
 
-The current module introduces local security groups, SID usage, account membership, RPC-allocated result buffers, and pointer-sized pagination handles. Process, thread, memory, token, service, registry, and window modules are planned next.
+The current modules introduce local security groups, SID usage, account membership, RPC-allocated result buffers, Toolhelp snapshots, process handles, session IDs, and WOW64 architecture. Thread, memory, token, service, registry, and window modules are planned next.
 
 ## 🔍 Process Inspection
 
-Planned. The next laboratory will cover `CreateToolhelp32Snapshot`, `Process32First`, `Process32Next`, `OpenProcess`, image paths, architecture, modules, and memory-region metadata.
+Implemented read-only inspection through `CreateToolhelp32Snapshot`, `Process32FirstW`, `Process32NextW`, `OpenProcess`, `QueryFullProcessImageNameW`, `GetProcessTimes`, `ProcessIdToSessionId`, and `IsWow64Process2`.
+
+See [Process inspection](docs/processes.md).
 
 ## 🧵 Thread APIs
 
@@ -78,9 +82,12 @@ The project does not implement credential theft, process injection, or memory mo
 ```text
 src/CSharp.WinAPI/                 reusable library
   Interop/Netapi32/                raw documented native declarations and native layouts
-  LocalGroups/                     managed read-only inspection abstractions
+  Interop/Kernel32/                raw process declarations, layouts, and SafeHandles
+  LocalGroups/                     managed read-only local-group abstraction
+  Processes/                       managed read-only process abstraction
 examples/learning/                 minimal interop demonstrations
 examples/security/                 defensive investigation examples
+examples/processes/                process inspection examples
 tests/CSharp.WinAPI.Tests/         dependency-free executable integration tests
 docs/                              interop guidance, security notes, and roadmap
 ```
@@ -108,7 +115,8 @@ dotnet run --project tests/CSharp.WinAPI.Tests --configuration Debug
 1. `examples/learning/01-dllimport` — traditional P/Invoke.
 2. `examples/learning/02-libraryimport` — generated modern P/Invoke.
 3. `docs/security/local-group-inspection.md` — native buffers, errors, pagination, and defensive relevance.
-4. See the [full roadmap](docs/roadmap.md).
+4. `examples/processes/ProcessEnumeration` — Toolhelp snapshots and safe process inspection.
+5. See the [full roadmap](docs/roadmap.md).
 
 ## ⚠️ Privileges & Windows Version Considerations
 
@@ -124,7 +132,12 @@ The module targets Windows and uses Unicode Netapi32 APIs available since Window
 | Interop learning | `GetCurrentProcessId` with `DllImport` | Example | Example run | Yes |
 | Interop learning | `GetCurrentProcessId` with `LibraryImport` | Example | Example run | Yes |
 | Interop learning | CsWin32 | Planned | No | Yes |
-| Processes | Process inspection APIs | Planned | No | Planned |
+| Processes | `CreateToolhelp32Snapshot`, `Process32FirstW`, `Process32NextW` | Yes | Yes | Yes |
+| Processes | `OpenProcess` with SafeHandle | Yes | Indirectly | Yes |
+| Processes | `QueryFullProcessImageNameW` | Yes | Yes | Yes |
+| Processes | `GetProcessTimes` | Yes | Indirectly | Yes |
+| Processes | `ProcessIdToSessionId` | Yes | Indirectly | Yes |
+| Processes | `IsWow64Process2` with compatibility fallback | Yes | Yes | Yes |
 
 ## 🤝 Contributing
 
