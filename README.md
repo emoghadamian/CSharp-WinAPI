@@ -43,7 +43,7 @@ Both enumeration APIs preserve their `NET_API_STATUS` return code in `NetApiExce
 
 ## 🧠 Windows Internals
 
-The current modules introduce local security groups, SID usage, account membership, RPC-allocated result buffers, Toolhelp snapshots, process handles, session IDs, and WOW64 architecture. Thread, memory, token, service, registry, and window modules are planned next.
+The current modules introduce local security groups, SID usage, account membership, RPC-allocated result buffers, Toolhelp process/thread snapshots, process handles, session IDs, thread priorities, and WOW64 architecture. Memory, token, service, registry, and window modules are planned next.
 
 ## 🔍 Process Inspection
 
@@ -53,7 +53,9 @@ See [Process inspection](docs/processes.md).
 
 ## 🧵 Thread APIs
 
-Planned after the Process API laboratory.
+Implemented read-only Toolhelp thread enumeration through `Thread32First` and `Thread32Next`. `ThreadInspector` exposes thread ID, owning PID, base priority, and per-process filtering without opening thread handles.
+
+See [Thread inspection](docs/threads.md).
 
 ## 💾 Memory APIs
 
@@ -85,9 +87,11 @@ src/CSharp.WinAPI/                 reusable library
   Interop/Kernel32/                raw process declarations, layouts, and SafeHandles
   LocalGroups/                     managed read-only local-group abstraction
   Processes/                       managed read-only process abstraction
+  Threads/                         managed read-only thread abstraction
 examples/learning/                 minimal interop demonstrations
 examples/security/                 defensive investigation examples
 examples/processes/                process inspection examples
+examples/threads/                  thread inspection examples
 tests/CSharp.WinAPI.Tests/         dependency-free executable integration tests
 docs/                              interop guidance, security notes, and roadmap
 ```
@@ -116,7 +120,8 @@ dotnet run --project tests/CSharp.WinAPI.Tests --configuration Debug
 2. `examples/learning/02-libraryimport` — generated modern P/Invoke.
 3. `docs/security/local-group-inspection.md` — native buffers, errors, pagination, and defensive relevance.
 4. `examples/processes/ProcessEnumeration` — Toolhelp snapshots and safe process inspection.
-5. See the [full roadmap](docs/roadmap.md).
+5. `examples/threads/ThreadEnumeration` — Toolhelp thread snapshots and process-to-thread relationships.
+6. See the [full roadmap](docs/roadmap.md).
 
 ## ⚠️ Privileges & Windows Version Considerations
 
@@ -138,6 +143,8 @@ The module targets Windows and uses Unicode Netapi32 APIs available since Window
 | Processes | `GetProcessTimes` | Yes | Indirectly | Yes |
 | Processes | `ProcessIdToSessionId` | Yes | Indirectly | Yes |
 | Processes | `IsWow64Process2` with compatibility fallback | Yes | Yes | Yes |
+| Threads | `CreateToolhelp32Snapshot` with `TH32CS_SNAPTHREAD` | Yes | Yes | Yes |
+| Threads | `Thread32First`, `Thread32Next`, `THREADENTRY32` | Yes | Yes | Yes |
 
 ## 🤝 Contributing
 

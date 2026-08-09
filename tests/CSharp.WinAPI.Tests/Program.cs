@@ -1,5 +1,6 @@
 using CSharp.WinAPI.LocalGroups;
 using CSharp.WinAPI.Processes;
+using CSharp.WinAPI.Threads;
 
 var failures = new List<string>();
 var inspector = new LocalGroupInspector();
@@ -73,6 +74,36 @@ Run("process inspection can be repeated without retaining handles", () =>
     {
         var processes = processInspector.EnumerateProcesses();
         Assert(processes.Count > 0, "Process enumeration returned no entries.");
+    }
+});
+
+var threadInspector = new ThreadInspector();
+
+Run("thread enumeration returns at least one thread", () =>
+{
+    Assert(threadInspector.EnumerateThreads().Count > 0, "No threads were returned.");
+});
+
+Run("current process threads expose core Toolhelp data", () =>
+{
+    var currentProcessId = (uint)Environment.ProcessId;
+    var threads = threadInspector.EnumerateProcessThreads(currentProcessId);
+    Assert(threads.Count > 0, "The current process had no threads in the snapshot.");
+    Assert(threads.All(thread => thread.ThreadId > 0), "A current-process thread had an invalid ID.");
+    Assert(threads.All(thread => thread.ProcessId == currentProcessId), "Thread filtering returned another process's thread.");
+    Assert(threads.All(thread => thread.BasePriority is >= 0 and <= 31), "A base priority was outside the THREADENTRY32 range.");
+});
+
+Run("invalid process thread filtering returns no entries", () =>
+{
+    Assert(threadInspector.EnumerateProcessThreads(uint.MaxValue).Count == 0, "The impossible PID unexpectedly had threads.");
+});
+
+Run("thread inspection can be repeated without retaining snapshot handles", () =>
+{
+    for (var iteration = 0; iteration < 3; iteration++)
+    {
+        Assert(threadInspector.EnumerateThreads().Count > 0, "Thread enumeration returned no entries.");
     }
 });
 

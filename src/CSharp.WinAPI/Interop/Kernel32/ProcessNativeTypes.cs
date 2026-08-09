@@ -40,3 +40,17 @@ internal unsafe struct ProcessEntry32Native
         }
     }
 }
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct ThreadEntry32Native
+{
+    internal uint Size;
+    internal uint UsageCount;
+    internal uint ThreadId;
+    internal uint OwnerProcessId;
+    internal int BasePriority;
+    internal int DeltaPriority;
+    internal uint Flags;
+
+    internal bool HasCoreInformation => Size >= 20;
+}

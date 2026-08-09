@@ -10,7 +10,8 @@
 
 - local-group enumeration and membership inspection
 - process enumeration, safe process handles, image paths, sessions, and architecture
-- modules and threads
+- thread enumeration, per-process filtering, and base priority
+- modules
 - service and registry inspection
 
 ## Advanced

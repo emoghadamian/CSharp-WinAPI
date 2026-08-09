@@ -6,6 +6,7 @@ namespace CSharp.WinAPI.Interop.Kernel32;
 internal static partial class Kernel32Native
 {
     internal const uint Th32CsSnapProcess = 0x00000002;
+    internal const uint Th32CsSnapThread = 0x00000004;
     internal const int ErrorNoMoreFiles = 18;
     internal const int ErrorCallNotImplemented = 120;
 
@@ -19,6 +20,14 @@ internal static partial class Kernel32Native
     [LibraryImport("kernel32.dll", EntryPoint = "Process32NextW", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool Process32Next(SafeSnapshotHandle snapshot, ref ProcessEntry32Native processEntry);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "Thread32First", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool Thread32First(SafeSnapshotHandle snapshot, ref ThreadEntry32Native threadEntry);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "Thread32Next", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool Thread32Next(SafeSnapshotHandle snapshot, ref ThreadEntry32Native threadEntry);
 
     [LibraryImport("kernel32.dll", EntryPoint = "OpenProcess", SetLastError = true)]
     internal static partial SafeProcessHandle OpenProcess(
