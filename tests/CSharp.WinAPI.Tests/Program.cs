@@ -1,4 +1,5 @@
 using CSharp.WinAPI.LocalGroups;
+using CSharp.WinAPI.Modules;
 using CSharp.WinAPI.Processes;
 using CSharp.WinAPI.Threads;
 
@@ -104,6 +105,50 @@ Run("thread inspection can be repeated without retaining snapshot handles", () =
     for (var iteration = 0; iteration < 3; iteration++)
     {
         Assert(threadInspector.EnumerateThreads().Count > 0, "Thread enumeration returned no entries.");
+    }
+});
+
+var moduleInspector = new ModuleInspector();
+
+Run("current process module enumeration returns complete entries", () =>
+{
+    var currentProcessId = (uint)Environment.ProcessId;
+    var modules = moduleInspector.EnumerateProcessModules(currentProcessId);
+    Assert(modules.Count > 0, "The current process had no modules.");
+    Assert(modules.All(module => !string.IsNullOrWhiteSpace(module.ModuleName)), "A module had no name.");
+    Assert(modules.All(module => module.ProcessId == currentProcessId), "A module belonged to another process.");
+    Assert(modules.All(module => module.BaseAddress > 0), "A module had an invalid base address.");
+    Assert(modules.All(module => module.ModuleSize > 0), "A module had an invalid size.");
+    Assert(
+        modules.All(module => string.IsNullOrWhiteSpace(module.ModulePath) || Path.IsPathFullyQualified(module.ModulePath)),
+        "A non-empty module path was not fully qualified.");
+
+    if (!string.IsNullOrWhiteSpace(Environment.ProcessPath))
+    {
+        Assert(
+            modules.Any(module => string.Equals(module.ModulePath, Environment.ProcessPath, StringComparison.OrdinalIgnoreCase)),
+            "The current executable image was absent from its module list.");
+    }
+});
+
+Run("invalid module process IDs preserve a native failure", () =>
+{
+    try
+    {
+        _ = moduleInspector.EnumerateProcessModules(uint.MaxValue);
+        throw new InvalidOperationException("The impossible PID unexpectedly returned a module list.");
+    }
+    catch (ModuleInspectionException exception)
+    {
+        Assert(exception.NativeErrorCode != 0, "The module failure did not preserve a Win32 error code.");
+    }
+});
+
+Run("module inspection can be repeated without retaining snapshot handles", () =>
+{
+    for (var iteration = 0; iteration < 3; iteration++)
+    {
+        Assert(moduleInspector.EnumerateProcessModules((uint)Environment.ProcessId).Count > 0, "Module enumeration returned no entries.");
     }
 });
 

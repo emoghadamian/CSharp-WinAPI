@@ -7,6 +7,8 @@ internal static partial class Kernel32Native
 {
     internal const uint Th32CsSnapProcess = 0x00000002;
     internal const uint Th32CsSnapThread = 0x00000004;
+    internal const uint Th32CsSnapModule = 0x00000008;
+    internal const uint Th32CsSnapModule32 = 0x00000010;
     internal const int ErrorNoMoreFiles = 18;
     internal const int ErrorCallNotImplemented = 120;
 
@@ -28,6 +30,14 @@ internal static partial class Kernel32Native
     [LibraryImport("kernel32.dll", EntryPoint = "Thread32Next", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool Thread32Next(SafeSnapshotHandle snapshot, ref ThreadEntry32Native threadEntry);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "Module32FirstW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool Module32First(SafeSnapshotHandle snapshot, ref ModuleEntry32Native moduleEntry);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "Module32NextW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool Module32Next(SafeSnapshotHandle snapshot, ref ModuleEntry32Native moduleEntry);
 
     [LibraryImport("kernel32.dll", EntryPoint = "OpenProcess", SetLastError = true)]
     internal static partial SafeProcessHandle OpenProcess(

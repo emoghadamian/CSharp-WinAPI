@@ -43,7 +43,7 @@ Both enumeration APIs preserve their `NET_API_STATUS` return code in `NetApiExce
 
 ## 🧠 Windows Internals
 
-The current modules introduce local security groups, SID usage, account membership, RPC-allocated result buffers, Toolhelp process/thread snapshots, process handles, session IDs, thread priorities, and WOW64 architecture. Memory, token, service, registry, and window modules are planned next.
+The current modules introduce local security groups, SID usage, account membership, RPC-allocated result buffers, Toolhelp process/thread/module snapshots, process handles, session IDs, thread priorities, module base addresses, and WOW64 architecture. Memory, token, service, registry, and window modules are planned next.
 
 ## 🔍 Process Inspection
 
@@ -63,7 +63,9 @@ Planned as read-only `VirtualQueryEx` and `ReadProcessMemory` inspection. Memory
 
 ## 📦 Module / DLL APIs
 
-Planned for documented process-module enumeration and image metadata.
+Implemented read-only Toolhelp module enumeration through `Module32FirstW` and `Module32NextW`. `ModuleInspector` exposes name, path, unsigned pointer-sized base address, image size, and owning PID.
+
+See [Module and DLL inspection](docs/modules.md).
 
 ## 🔐 Security APIs
 
@@ -88,10 +90,12 @@ src/CSharp.WinAPI/                 reusable library
   LocalGroups/                     managed read-only local-group abstraction
   Processes/                       managed read-only process abstraction
   Threads/                         managed read-only thread abstraction
+  Modules/                         managed read-only module abstraction
 examples/learning/                 minimal interop demonstrations
 examples/security/                 defensive investigation examples
 examples/processes/                process inspection examples
 examples/threads/                  thread inspection examples
+examples/modules/                  module and DLL inspection examples
 tests/CSharp.WinAPI.Tests/         dependency-free executable integration tests
 docs/                              interop guidance, security notes, and roadmap
 ```
@@ -121,7 +125,8 @@ dotnet run --project tests/CSharp.WinAPI.Tests --configuration Debug
 3. `docs/security/local-group-inspection.md` — native buffers, errors, pagination, and defensive relevance.
 4. `examples/processes/ProcessEnumeration` — Toolhelp snapshots and safe process inspection.
 5. `examples/threads/ThreadEnumeration` — Toolhelp thread snapshots and process-to-thread relationships.
-6. See the [full roadmap](docs/roadmap.md).
+6. `examples/modules/ModuleEnumeration` — module snapshots, addresses, and cross-architecture limits.
+7. See the [full roadmap](docs/roadmap.md).
 
 ## ⚠️ Privileges & Windows Version Considerations
 
@@ -145,6 +150,8 @@ The module targets Windows and uses Unicode Netapi32 APIs available since Window
 | Processes | `IsWow64Process2` with compatibility fallback | Yes | Yes | Yes |
 | Threads | `CreateToolhelp32Snapshot` with `TH32CS_SNAPTHREAD` | Yes | Yes | Yes |
 | Threads | `Thread32First`, `Thread32Next`, `THREADENTRY32` | Yes | Yes | Yes |
+| Modules | `CreateToolhelp32Snapshot` with module flags | Yes | Yes | Yes |
+| Modules | `Module32FirstW`, `Module32NextW`, `MODULEENTRY32W` | Yes | Yes | Yes |
 
 ## 🤝 Contributing
 

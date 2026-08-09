@@ -16,6 +16,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProcessEnumeration", "examp
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ThreadEnumeration", "examples\threads\ThreadEnumeration\ThreadEnumeration.csproj", "{D31A76FD-9A83-41E4-B4FE-FF2F20D9D5A4}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ModuleEnumeration", "examples\modules\ModuleEnumeration\ModuleEnumeration.csproj", "{C0BD9F4C-6F56-4D47-A5DA-5B5A58DDD3BD}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -50,5 +52,9 @@ Global
 		{D31A76FD-9A83-41E4-B4FE-FF2F20D9D5A4}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D31A76FD-9A83-41E4-B4FE-FF2F20D9D5A4}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D31A76FD-9A83-41E4-B4FE-FF2F20D9D5A4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C0BD9F4C-6F56-4D47-A5DA-5B5A58DDD3BD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C0BD9F4C-6F56-4D47-A5DA-5B5A58DDD3BD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C0BD9F4C-6F56-4D47-A5DA-5B5A58DDD3BD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C0BD9F4C-6F56-4D47-A5DA-5B5A58DDD3BD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
