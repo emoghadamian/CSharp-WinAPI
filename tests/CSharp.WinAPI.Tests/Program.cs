@@ -1,4 +1,5 @@
 using CSharp.WinAPI.LocalGroups;
+using CSharp.WinAPI.Memory;
 using CSharp.WinAPI.Modules;
 using CSharp.WinAPI.Processes;
 using CSharp.WinAPI.Threads;
@@ -149,6 +150,114 @@ Run("module inspection can be repeated without retaining snapshot handles", () =
     for (var iteration = 0; iteration < 3; iteration++)
     {
         Assert(moduleInspector.EnumerateProcessModules((uint)Environment.ProcessId).Count > 0, "Module enumeration returned no entries.");
+    }
+});
+
+var memoryInspector = new VirtualMemoryInspector();
+
+Run("virtual-memory enumeration returns regions", () =>
+{
+    Assert(memoryInspector.EnumerateProcessMemory((uint)Environment.ProcessId).Count > 0, "No virtual-memory regions were returned.");
+});
+
+Run("virtual-memory regions have positive sizes", () =>
+{
+    var regions = memoryInspector.EnumerateProcessMemory((uint)Environment.ProcessId);
+    Assert(regions.All(region => region.RegionSize > 0), "A virtual-memory region had zero size.");
+});
+
+Run("virtual-memory base addresses use pointer-sized values", () =>
+{
+    var regions = memoryInspector.EnumerateProcessMemory((uint)Environment.ProcessId);
+    Assert(IntPtr.Size is 4 or 8, "The runtime did not report a supported pointer size.");
+    Assert(regions.All(region => region.BaseAddress <= nuint.MaxValue), "A base address could not be represented as nuint.");
+});
+
+Run("virtual-memory size values are representable", () =>
+{
+    var regions = memoryInspector.EnumerateProcessMemory((uint)Environment.ProcessId);
+    Assert(
+        regions.All(region => region.BaseAddress <= nuint.MaxValue - region.RegionSize),
+        "A region end address overflowed the pointer-sized address range.");
+});
+
+Run("virtual-memory states are documented values", () =>
+{
+    var regions = memoryInspector.EnumerateProcessMemory((uint)Environment.ProcessId);
+    Assert(
+        regions.All(region => region.State is MemoryState.Commit or MemoryState.Reserve or MemoryState.Free),
+        "A region had an unknown state value.");
+});
+
+Run("virtual-memory protection flags retain valid raw values", () =>
+{
+    const uint knownProtectionBits =
+        (uint)(MemoryProtection.NoAccess |
+               MemoryProtection.ReadOnly |
+               MemoryProtection.ReadWrite |
+               MemoryProtection.WriteCopy |
+               MemoryProtection.Execute |
+               MemoryProtection.ExecuteRead |
+               MemoryProtection.ExecuteReadWrite |
+               MemoryProtection.ExecuteWriteCopy |
+               MemoryProtection.Guard |
+               MemoryProtection.NoCache |
+               MemoryProtection.WriteCombine |
+               MemoryProtection.TargetsInvalid);
+    var regions = memoryInspector.EnumerateProcessMemory((uint)Environment.ProcessId);
+    var committed = regions.Where(region => region.State == MemoryState.Commit).ToList();
+
+    Assert(committed.Count > 0, "The current process had no committed memory regions.");
+    Assert(committed.All(region => (region.RawProtection & ~knownProtectionBits) == 0), "A committed region had unknown protection bits.");
+    Assert(committed.All(region => region.RawProtection == (uint)region.Protection), "Protection flags were not preserved exactly.");
+});
+
+Run("virtual-memory types retain valid raw values", () =>
+{
+    var regions = memoryInspector.EnumerateProcessMemory((uint)Environment.ProcessId);
+    Assert(
+        regions.All(region => region.Type is MemoryType.None or MemoryType.Private or MemoryType.Mapped or MemoryType.Image),
+        "A region had an unknown type value.");
+    Assert(regions.All(region => region.RawType == (uint)region.Type), "Type values were not preserved exactly.");
+});
+
+Run("virtual-memory traversal terminates", () =>
+{
+    var regions = memoryInspector.EnumerateProcessMemory((uint)Environment.ProcessId);
+    Assert(regions.Count < 100_000, "Virtual-memory traversal exceeded the expected finite region count.");
+});
+
+Run("virtual-memory regions do not overlap or duplicate", () =>
+{
+    var regions = memoryInspector.EnumerateProcessMemory((uint)Environment.ProcessId);
+
+    for (var index = 0; index < regions.Count - 1; index++)
+    {
+        var current = regions[index];
+        var next = regions[index + 1];
+        Assert(current.BaseAddress + current.RegionSize <= next.BaseAddress, "Virtual-memory regions overlapped or were duplicated.");
+    }
+});
+
+Run("invalid virtual-memory process IDs preserve a native failure", () =>
+{
+    try
+    {
+        _ = memoryInspector.EnumerateProcessMemory(uint.MaxValue);
+        throw new InvalidOperationException("The impossible PID unexpectedly returned virtual-memory metadata.");
+    }
+    catch (MemoryInspectionException exception)
+    {
+        Assert(exception.Operation == "OpenProcess", $"Expected OpenProcess to fail, got {exception.Operation}.");
+        Assert(exception.NativeErrorCode != 0, "The memory failure did not preserve a Win32 error code.");
+    }
+});
+
+Run("virtual-memory inspection can be repeated without retaining handles", () =>
+{
+    for (var iteration = 0; iteration < 3; iteration++)
+    {
+        Assert(memoryInspector.EnumerateProcessMemory((uint)Environment.ProcessId).Count > 0, "Virtual-memory enumeration returned no regions.");
     }
 });
 

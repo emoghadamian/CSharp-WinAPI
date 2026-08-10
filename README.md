@@ -27,7 +27,7 @@ See [DllImport vs LibraryImport](docs/interop/dllimport-vs-libraryimport.md).
 
 ## 🧩 P/Invoke
 
-`src/CSharp.WinAPI/Interop` contains raw declarations only. Managed logic lives separately in `src/CSharp.WinAPI/LocalGroups` and `src/CSharp.WinAPI/Processes`; no application flow is embedded in native declarations.
+`src/CSharp.WinAPI/Interop` contains raw declarations only. Managed logic lives separately in feature-focused namespaces; no application flow is embedded in native declarations.
 
 ## ⚙️ Win32 APIs
 
@@ -43,7 +43,7 @@ Both enumeration APIs preserve their `NET_API_STATUS` return code in `NetApiExce
 
 ## 🧠 Windows Internals
 
-The current modules introduce local security groups, SID usage, account membership, RPC-allocated result buffers, Toolhelp process/thread/module snapshots, process handles, session IDs, thread priorities, module base addresses, and WOW64 architecture. Memory, token, service, registry, and window modules are planned next.
+The current modules introduce local security groups, SID usage, account membership, RPC-allocated result buffers, Toolhelp process/thread/module snapshots, process handles, session IDs, thread priorities, module base addresses, WOW64 architecture, and virtual-memory region metadata. Token, service, registry, and window modules are planned next.
 
 ## 🔍 Process Inspection
 
@@ -59,7 +59,9 @@ See [Thread inspection](docs/threads.md).
 
 ## 💾 Memory APIs
 
-Planned as read-only `VirtualQueryEx` and `ReadProcessMemory` inspection. Memory-writing APIs are intentionally out of scope for the core library.
+Implemented read-only virtual-memory metadata inspection through `OpenProcess` and `VirtualQueryEx`. `VirtualMemoryInspector` exposes pointer-sized region addresses and sizes, state, protections, allocation protection, and type without reading or modifying process memory.
+
+See [Virtual-memory inspection](docs/memory.md).
 
 ## 📦 Module / DLL APIs
 
@@ -91,11 +93,13 @@ src/CSharp.WinAPI/                 reusable library
   Processes/                       managed read-only process abstraction
   Threads/                         managed read-only thread abstraction
   Modules/                         managed read-only module abstraction
+  Memory/                          managed read-only virtual-memory metadata abstraction
 examples/learning/                 minimal interop demonstrations
 examples/security/                 defensive investigation examples
 examples/processes/                process inspection examples
 examples/threads/                  thread inspection examples
 examples/modules/                  module and DLL inspection examples
+examples/memory/                   virtual-memory inspection examples
 tests/CSharp.WinAPI.Tests/         dependency-free executable integration tests
 docs/                              interop guidance, security notes, and roadmap
 ```
@@ -126,7 +130,8 @@ dotnet run --project tests/CSharp.WinAPI.Tests --configuration Debug
 4. `examples/processes/ProcessEnumeration` — Toolhelp snapshots and safe process inspection.
 5. `examples/threads/ThreadEnumeration` — Toolhelp thread snapshots and process-to-thread relationships.
 6. `examples/modules/ModuleEnumeration` — module snapshots, addresses, and cross-architecture limits.
-7. See the [full roadmap](docs/roadmap.md).
+7. `examples/memory/VirtualMemoryInspection` — virtual-memory region metadata and safe traversal.
+8. See the [full roadmap](docs/roadmap.md).
 
 ## ⚠️ Privileges & Windows Version Considerations
 
@@ -152,6 +157,8 @@ The module targets Windows and uses Unicode Netapi32 APIs available since Window
 | Threads | `Thread32First`, `Thread32Next`, `THREADENTRY32` | Yes | Yes | Yes |
 | Modules | `CreateToolhelp32Snapshot` with module flags | Yes | Yes | Yes |
 | Modules | `Module32FirstW`, `Module32NextW`, `MODULEENTRY32W` | Yes | Yes | Yes |
+| Virtual memory | `OpenProcess` with `PROCESS_QUERY_INFORMATION` | Yes | Yes | Yes |
+| Virtual memory | `VirtualQueryEx`, `MEMORY_BASIC_INFORMATION` | Yes | Yes | Yes |
 
 ## 🤝 Contributing
 

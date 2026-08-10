@@ -45,6 +45,16 @@ internal static partial class Kernel32Native
         [MarshalAs(UnmanagedType.Bool)] bool inheritHandle,
         uint processId);
 
+    [LibraryImport("kernel32.dll", EntryPoint = "VirtualQueryEx", SetLastError = true)]
+    internal static partial nuint VirtualQueryEx(
+        SafeProcessHandle process,
+        nint address,
+        out MemoryBasicInformationNative memoryInformation,
+        nuint memoryInformationLength);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "GetSystemInfo")]
+    internal static partial void GetSystemInfo(out SystemInfoNative systemInformation);
+
     [LibraryImport("kernel32.dll", EntryPoint = "QueryFullProcessImageNameW", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static unsafe partial bool QueryFullProcessImageName(

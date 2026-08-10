@@ -12,10 +12,11 @@
 - process enumeration, safe process handles, image paths, sessions, and architecture
 - thread enumeration, per-process filtering, and base priority
 - module enumeration, paths, pointer-sized base addresses, and WOW64 behavior
+- virtual-memory metadata, pointer-sized region traversal, and memory state/protection/type
 - service and registry inspection
 
 ## Advanced
 
 - token privileges and integrity levels
-- virtual-memory metadata and PE inspection
+- PE inspection
 - documented versus NT-native API compatibility boundaries
