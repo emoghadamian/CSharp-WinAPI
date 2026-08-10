@@ -14,10 +14,12 @@
 - module enumeration, paths, pointer-sized base addresses, and WOW64 behavior
 - virtual-memory metadata, pointer-sized region traversal, and memory state/protection/type
 - PE image headers, sections, data directories, and RVA-to-file-offset mapping
+- PE Certificate Table file-offset inspection, WIN_CERTIFICATE parsing, PKCS#7/CMS metadata, and public X.509 metadata
 - service and registry inspection
 
 ## Advanced
 
 - token privileges and integrity levels
-- PE signature analysis
+- Authenticode hashing and cryptographic signature verification
+- certificate-chain, Windows trust, and CRL/OCSP validation
 - documented versus NT-native API compatibility boundaries

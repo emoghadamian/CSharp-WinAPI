@@ -90,6 +90,32 @@ try
     }
 
     Console.WriteLine("Imports are APIs required by an image; exports are APIs it exposes. Both are metadata, not proof of execution.");
+
+    Console.WriteLine();
+    Console.WriteLine("Certificate Table:");
+    if (image.CertificateTable is null)
+    {
+        Console.WriteLine("  Present: No");
+    }
+    else
+    {
+        Console.WriteLine($"  Present: Yes; Offset: 0x{image.CertificateTable.FileOffset:X8}; Size: 0x{image.CertificateTable.Size:X8}; Entries: {image.CertificateTable.EntryCount}");
+        foreach (var entry in image.CertificateTable.Entries.Take(10))
+        {
+            Console.WriteLine($"  Revision: 0x{entry.Revision:X4}; Type: 0x{entry.CertificateType:X4}; Length: {entry.Length}");
+            if (entry.Certificates is not null)
+            {
+                Console.WriteLine($"    PKCS#7 metadata: certificates {entry.Certificates.Count}; signers {entry.SignerCount}; digest {entry.DigestAlgorithm}");
+                foreach (var certificate in entry.Certificates.Take(3))
+                {
+                    Console.WriteLine($"    Subject: {certificate.Subject}; Issuer: {certificate.Issuer}");
+                    Console.WriteLine($"    Serial: {certificate.SerialNumber}; Thumbprint: {certificate.Thumbprint}");
+                    Console.WriteLine($"    Signature: {certificate.SignatureAlgorithm}; Public key: {certificate.PublicKeyAlgorithm}; Valid: {certificate.NotBefore:u} - {certificate.NotAfter:u}");
+                }
+            }
+        }
+    }
+    Console.WriteLine("Certificate metadata and PKCS#7 parsing do not establish signature validity, trust, or file safety.");
 }
 catch (PeImageInspectionException exception)
 {

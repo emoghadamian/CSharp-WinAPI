@@ -83,6 +83,10 @@ PE inspection also includes read-only Export Directory parsing for export DLL na
 
 See [PE export-directory inspection](docs/pe-exports.md).
 
+PE inspection also parses the Certificate Table as a file offset, aligned `WIN_CERTIFICATE` entries, PKCS#7/CMS metadata, and public X.509 metadata. Authenticode hashing and cryptographic verification, certificate-chain and Windows trust validation, and CRL/OCSP validation remain deferred.
+
+See [PE Certificate Table](docs/pe-certificates.md).
+
 ## 🔐 Security APIs
 
 Implemented: read-only local-group and member enumeration.

@@ -5,6 +5,8 @@ using CSharp.WinAPI.Pe;
 using CSharp.WinAPI.Processes;
 using CSharp.WinAPI.Threads;
 
+var FixedCms = Convert.FromBase64String("MIIExwYJKoZIhvcNAQcCoIIEuDCCBLQCAQExDTALBglghkgBZQMEAgEwEgYJKoZIhvcNAQcBoAUEAwECA6CCAw4wggMKMIIB8qADAgECAggdZs60nr5UFTANBgkqhkiG9w0BAQsFADBFMQswCQYDVQQGEwJVUzEWMBQGA1UEChMNQmx1ZVRlYW0gTGFiczEeMBwGA1UEAxMVQ1NoYXJwLVdpbkFQSSBGaXh0dXJlMB4XDTI0MDEwMTAwMDAwMFoXDTMwMDEwMTAwMDAwMFowRTELMAkGA1UEBhMCVVMxFjAUBgNVBAoTDUJsdWVUZWFtIExhYnMxHjAcBgNVBAMTFUNTaGFycC1XaW5BUEkgRml4dHVyZTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAOn7dkQvMA146Z5D97EEquUMv93h0bRqGSApRY34kRS7wC2K2vjIZ3rqKUnU8Z1l7g2uO+97HQvwIrMG8dSCfpVeIcgV108U03FQsx+qxSXbm9NaVDVa4tMf1ez96wbCC2sJyV0tzAurYKRTefBY4D/BgVJiUKpXYYxQmr3CZ+4mYUitBZOeAdPCtnEG8b/OP9XEfmlfHoi4nhMIfe82OyTtFHmERxxFcb/PmlaEgpwtxf4nw0UP2st/k1aIcQ7gQF0eBQIEt+X0qMvv4jWrOYs979cwGq90nqwva9DwrseCJxc019eTKeVaGkmqm+xdAdeTazAUa5kL1JDRuGphrp0CAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAMu/QKioJWUCEolVX6j/GqYx3P7o6tZ/HyixjVNN6qwkDZTg4Mlz9T9d6usTFFbCXLujMBJI4EFWvN4MoeJsYaSuhf8N1Ok+TkoypWrNn+TKLlkLAjIjUTX01PKWYfqB1F6f0f9KmjCykrhgNQUwcYyCnP38R0H26cGzNyRK5ph7XutM4fXpLGbOw8hjQ5nUdlFhChS+A7cw0KoV8ez5sjdRIvUBZNp6nxBvNJurreHaYlAvV/0Q78/x+FuT76Xv7Y6sdJZYxBcgGuMOxx9LVITRVQmcdDVz2+03UBM4dPLpad25qIQLs0NBOl2Du1vuo6+ECEml2abg5rvkdm9FmXzGCAXgwggF0AgEBMFEwRTELMAkGA1UEBhMCVVMxFjAUBgNVBAoTDUJsdWVUZWFtIExhYnMxHjAcBgNVBAMTFUNTaGFycC1XaW5BUEkgRml4dHVyZQIIHWbOtJ6+VBUwCwYJYIZIAWUDBAIBMAsGCSqGSIb3DQEBAQSCAQB2rWkuriJPPD/L+KNmdT5tRbMH8UcLMkxFZWfyadR2qK6BtQauZ/pBBj3VTuLyC1/RJGM6q5m7S1T6a6TOU06pzE7qHyu1NiaAyeOX8hJUdHR/L1UK/i9sKTb6f84o4mppe3CoLQSO1FGMJdHoqYGbSX+psX/8npyPdYfJZZQEkTlI7S32kNSBl878vV3OQO8TlEMolxTLN1KpZR00Qn6EDpuqhPckyS3Rcnw1FWao2C3Q0OUOzXgxU/H+dBKZJRfoBx0+fE8SsBb/FrW8/1PBiQr6W1R4jnMaYFvHnsEbL+1cdkpTK+TZNFaUiLd9r2HFGi6Mzi0lWimlcU+4VEC2");
+
 var failures = new List<string>();
 var inspector = new LocalGroupInspector();
 
@@ -526,6 +528,128 @@ Run("PE parser rejects overflowing public export ordinals", () => WithPeFixture(
     AssertPeFailure(() => peInspector.Inspect(path), "Export address table");
 }));
 
+Run("unsigned PE has no certificate table", () => WithPeFixture(pe32Plus: false, path =>
+{
+    Assert(peInspector.Inspect(path).CertificateTable is null, "An unsigned fixture unexpectedly had a certificate table.");
+}));
+
+Run("PE certificate table uses direct file offsets and preserves unknown types", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var bytes = File.ReadAllBytes(path);
+    Array.Resize(ref bytes, 0x608);
+    WriteUInt32(bytes, 0x118, 0x600);
+    WriteUInt32(bytes, 0x11C, 8);
+    WriteUInt32(bytes, 0x600, 8);
+    WriteUInt16(bytes, 0x604, 0x0200);
+    WriteUInt16(bytes, 0x606, 0x9999);
+    File.WriteAllBytes(path, bytes);
+    var table = peInspector.Inspect(path).CertificateTable;
+    Assert(table is not null && table.FileOffset == 0x600 && table.EntryCount == 1, "Certificate Table was not read as a direct file offset.");
+    var entry = table!.Entries.Single();
+    Assert(entry.PayloadOffset == 0x608 && entry.PayloadLength == 0 && entry.KnownRevision == PeCertificateRevision.Revision2 && entry.KnownCertificateType is null, "WIN_CERTIFICATE metadata was incorrect.");
+}));
+
+Run("PE certificate table parses the fixed public CMS fixture exactly", () => WithCertificateFixture(FixedCms, path =>
+{
+    var table = peInspector.Inspect(path).CertificateTable!;
+    var entry = table.Entries.Single();
+    Assert(entry.KnownRevision == PeCertificateRevision.Revision2 && entry.KnownCertificateType == PeCertificateType.PkcsSignedData, "The fixed CMS WIN_CERTIFICATE header was incorrect.");
+    Assert(entry.PayloadOffset == 0x608 && entry.PayloadLength == FixedCms.Length, "The fixed CMS payload bounds were incorrect.");
+    Assert(entry.SignerCount == 1 && !string.IsNullOrWhiteSpace(entry.DigestAlgorithm), "SignedCms signer metadata was not exposed.");
+    var certificate = entry.Certificates!.Single();
+    Assert(certificate.Subject == "CN=CSharp-WinAPI Fixture, O=BlueTeam Labs, C=US", "The fixture subject changed.");
+    Assert(certificate.Issuer == "CN=CSharp-WinAPI Fixture, O=BlueTeam Labs, C=US", "The fixture issuer changed.");
+    Assert(certificate.SerialNumber == "1D66CEB49EBE5415", "The fixture serial changed.");
+    Assert(certificate.Thumbprint == "49563851834AFBF57B8D31E5BE2785D21322FCD5", "The fixture thumbprint changed.");
+    Assert(certificate.NotBefore.ToUniversalTime() == new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc), "The fixture NotBefore changed.");
+    Assert(certificate.NotAfter.ToUniversalTime() == new DateTime(2030, 1, 1, 0, 0, 0, DateTimeKind.Utc), "The fixture NotAfter changed.");
+    Assert(certificate.SignatureAlgorithm == "sha256RSA", "The fixture signature algorithm changed.");
+    Assert(certificate.PublicKeyAlgorithm == "RSA", "The fixture public-key algorithm changed.");
+}));
+
+Run("PE certificate table supports aligned multiple entries", () => WithCertificateFixture(FixedCms, path =>
+{
+    var bytes = File.ReadAllBytes(path);
+    var firstLength = 8 + FixedCms.Length;
+    var secondOffset = Align8(0x600 + firstLength);
+    Array.Resize(ref bytes, secondOffset + 8);
+    WriteUInt32(bytes, secondOffset, 8);
+    WriteUInt16(bytes, secondOffset + 4, 0x0100);
+    WriteUInt16(bytes, secondOffset + 6, 0x9999);
+    WriteUInt32(bytes, 0x11C, (uint)(secondOffset + 8 - 0x600));
+    File.WriteAllBytes(path, bytes);
+    var table = peInspector.Inspect(path).CertificateTable!;
+    Assert(table.EntryCount == 2, "Aligned certificate entries were not both parsed.");
+    Assert(table.Entries[1].PayloadOffset == secondOffset + 8 && table.Entries[1].KnownRevision == PeCertificateRevision.Revision1 && table.Entries[1].KnownCertificateType is null, "The second certificate entry was incorrect.");
+}));
+
+Run("PE certificate table rejects invalid WIN_CERTIFICATE lengths", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var bytes = BuildCertificateFixture(new byte[0]);
+    WriteUInt32(bytes, 0x600, 0);
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Certificate table");
+    bytes = BuildCertificateFixture(new byte[0]);
+    WriteUInt32(bytes, 0x600, 7);
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Certificate table");
+}));
+
+Run("PE certificate table rejects truncated and out-of-bounds data", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var bytes = BuildCertificateFixture(new byte[] { 0xAA }, certificateType: 0x9999);
+    WriteUInt32(bytes, 0x600, 17);
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Certificate table");
+    bytes = BuildCertificateFixture(new byte[0], certificateType: 0x9999);
+    WriteUInt32(bytes, 0x11C, 12);
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Certificate table");
+    bytes = BuildPeFixture(pe32Plus: false);
+    WriteUInt32(bytes, 0x118, 0x700);
+    WriteUInt32(bytes, 0x11C, 8);
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Certificate table");
+}));
+
+Run("PE certificate table rejects invalid alignment and malformed later entries", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var bytes = BuildCertificateFixture(new byte[] { 0xAA }, certificateType: 0x9999);
+    WriteUInt32(bytes, 0x11C, 9);
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Certificate table");
+    bytes = BuildCertificateFixture(FixedCms);
+    var secondOffset = Align8(0x600 + 8 + FixedCms.Length);
+    Array.Resize(ref bytes, secondOffset + 8);
+    WriteUInt32(bytes, secondOffset, 0);
+    WriteUInt32(bytes, 0x11C, (uint)(secondOffset + 8 - 0x600));
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Certificate table");
+}));
+
+Run("PE certificate table reports malformed PKCS7 context", () => WithCertificateFixture(new byte[] { 1, 2, 3 }, path =>
+{
+    AssertPeFailure(() => peInspector.Inspect(path), "PKCS#7");
+}));
+
+Run("PE example displays unsigned and fixed certificate-bearing fixtures", () =>
+{
+    WithPeFixture(pe32Plus: false, path =>
+    {
+        var output = RunPeExample(path);
+        Assert(output.Contains("Certificate Table:"), "The PE example omitted the Certificate Table section.");
+        Assert(output.Contains("Present: No"), "The PE example did not identify the unsigned fixture.");
+    });
+    WithCertificateFixture(FixedCms, path =>
+    {
+        var output = RunPeExample(path);
+        Assert(output.Contains("Present: Yes"), "The PE example did not identify the certificate-bearing fixture.");
+        Assert(output.Contains("CN=CSharp-WinAPI Fixture, O=BlueTeam Labs, C=US"), "The PE example did not display the fixture identity.");
+        Assert(output.Contains("1D66CEB49EBE5415") && output.Contains("49563851834AFBF57B8D31E5BE2785D21322FCD5"), "The PE example did not display the exact fixture serial and thumbprint.");
+        Assert(output.Contains("do not establish signature validity, trust, or file safety"), "The PE example did not state its trust limitation.");
+    });
+});
+
 return failures.Count == 0 ? 0 : 1;
 
 void Run(string name, Action test)
@@ -563,6 +687,52 @@ static void WithPeFixture(bool pe32Plus, Action<string> test, bool includeImport
     {
         File.Delete(path);
     }
+}
+
+static void WithCertificateFixture(byte[] payload, Action<string> test)
+{
+    WithPeFixture(pe32Plus: false, path =>
+    {
+        File.WriteAllBytes(path, BuildCertificateFixture(payload));
+        test(path);
+    });
+}
+
+static byte[] BuildCertificateFixture(byte[] payload, ushort certificateType = (ushort)PeCertificateType.PkcsSignedData)
+{
+    const int tableOffset = 0x600;
+    var length = checked(8 + payload.Length);
+    var tableSize = Align8(length);
+    var image = BuildPeFixture(pe32Plus: false);
+    Array.Resize(ref image, tableOffset + tableSize);
+    WriteUInt32(image, 0x118, tableOffset);
+    WriteUInt32(image, 0x11C, (uint)tableSize);
+    WriteUInt32(image, tableOffset, (uint)length);
+    WriteUInt16(image, tableOffset + 4, 0x0200);
+    WriteUInt16(image, tableOffset + 6, certificateType);
+    payload.CopyTo(image.AsSpan(tableOffset + 8));
+    return image;
+}
+
+static int Align8(int value) => checked((value + 7) & ~7);
+
+static string RunPeExample(string path)
+{
+    var assemblyPath = Path.GetFullPath(Path.Combine("examples", "pe", "PeInspection", "bin", "Debug", "net8.0-windows", "PeInspection.dll"));
+    var dotnetHost = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet";
+    var startInfo = new System.Diagnostics.ProcessStartInfo(dotnetHost, $"\"{assemblyPath}\" \"{path}\"")
+    {
+        UseShellExecute = false,
+        RedirectStandardOutput = true,
+        RedirectStandardError = true,
+        CreateNoWindow = true,
+    };
+    using var process = System.Diagnostics.Process.Start(startInfo) ?? throw new InvalidOperationException("The PE example could not be started.");
+    var output = process.StandardOutput.ReadToEnd();
+    var error = process.StandardError.ReadToEnd();
+    process.WaitForExit();
+    Assert(process.ExitCode == 0, $"The PE example failed: {error}");
+    return output;
 }
 
 static void AssertPeFailure(Action action, string expectedStage)
@@ -641,8 +811,6 @@ static byte[] BuildPeFixture(bool pe32Plus, bool includeImports = false)
         WriteUInt32(image, directoryOffset + 8, 0x1100);
         WriteUInt32(image, directoryOffset + 12, 0x3C);
     }
-    WriteUInt32(image, directoryOffset + (4 * 8), 0x300);
-    WriteUInt32(image, directoryOffset + (4 * 8) + 4, 0x40);
     var sectionOffset = optionalOffset + (pe32Plus ? 0xF0 : 0xE0);
     ".text"u8.CopyTo(image.AsSpan(sectionOffset, 5));
     WriteUInt32(image, sectionOffset + 8, 0x400);

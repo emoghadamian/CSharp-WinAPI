@@ -1,4 +1,7 @@
 using System.Buffers.Binary;
+using System.Security.Cryptography;
+using System.Security.Cryptography.Pkcs;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 
 namespace CSharp.WinAPI.Pe;
@@ -180,7 +183,77 @@ public sealed class PeImageInspector
 
         parsedImage.SetImports(ParseImports(parsedImage, image));
         parsedImage.SetExports(ParseExports(parsedImage, image));
+        parsedImage.SetCertificateTable(ParseCertificateTable(parsedImage, image));
         return parsedImage;
+    }
+
+    private static PeCertificateTableInfo? ParseCertificateTable(PeImageInfo parsedImage, byte[] image)
+    {
+        var directory = parsedImage.DataDirectories.FirstOrDefault(entry => entry.Kind == PeDataDirectoryKind.CertificateTable);
+
+        if (directory is null || (directory.Address == 0 && directory.Size == 0))
+        {
+            return null;
+        }
+
+        // PE uniquely defines Certificate Table VirtualAddress as a file offset, never an RVA.
+        if (directory.Address == 0 || directory.Size < 8 || (ulong)directory.Address + directory.Size > (ulong)image.Length)
+        {
+            throw new PeImageInspectionException(parsedImage.FilePath, "Certificate table", "The certificate-table file offset or size is outside the file bounds.");
+        }
+
+        var tableEnd = (ulong)directory.Address + directory.Size;
+        var cursor = (ulong)directory.Address;
+        var entries = new List<PeCertificateInfo>();
+
+        while (cursor < tableEnd)
+        {
+            if (tableEnd - cursor < 8)
+            {
+                throw new PeImageInspectionException(parsedImage.FilePath, "Certificate table", "A WIN_CERTIFICATE header is truncated.");
+            }
+
+            var entryOffset = (uint)cursor;
+            var length = ReadUInt32(image, entryOffset, parsedImage.FilePath, "Certificate table");
+
+            if (length < 8 || cursor + length > tableEnd)
+            {
+                throw new PeImageInspectionException(parsedImage.FilePath, "Certificate table", "A WIN_CERTIFICATE length is invalid or extends outside the table.");
+            }
+
+            var revision = ReadUInt16(image, entryOffset + 4U, parsedImage.FilePath, "Certificate table");
+            var type = ReadUInt16(image, entryOffset + 6U, parsedImage.FilePath, "Certificate table");
+            var payloadOffset = entryOffset + 8U;
+            var payloadLength = length - 8U;
+            var metadata = type == (ushort)PeCertificateType.PkcsSignedData ? DecodeCms(image.AsSpan((int)payloadOffset, (int)payloadLength).ToArray(), parsedImage.FilePath) : (null, (int?)null, (string?)null);
+            entries.Add(new PeCertificateInfo(length, revision, type, payloadOffset, payloadLength, metadata.Item1, metadata.Item2, metadata.Item3));
+            var next = (cursor + length + 7UL) & ~7UL;
+
+            if (next <= cursor || next > tableEnd)
+            {
+                throw new PeImageInspectionException(parsedImage.FilePath, "Certificate table", "WIN_CERTIFICATE alignment exceeds the certificate-table bounds.");
+            }
+
+            cursor = next;
+        }
+
+        return new PeCertificateTableInfo(directory.Address, directory.Size, entries);
+    }
+
+    private static (IReadOnlyList<PeX509CertificateInfo>?, int?, string?) DecodeCms(byte[] payload, string filePath)
+    {
+        try
+        {
+            var cms = new SignedCms();
+            cms.Decode(payload);
+            var certificates = cms.Certificates.Cast<X509Certificate2>().Select(certificate => new PeX509CertificateInfo(certificate.Subject, certificate.Issuer, certificate.SerialNumber, certificate.Thumbprint, certificate.NotBefore, certificate.NotAfter, certificate.SignatureAlgorithm.FriendlyName ?? certificate.SignatureAlgorithm.Value ?? "Unknown", certificate.PublicKey.Oid.FriendlyName ?? certificate.PublicKey.Oid.Value ?? "Unknown")).ToList();
+            var digest = cms.SignerInfos.Count > 0 ? cms.SignerInfos[0].DigestAlgorithm.FriendlyName ?? cms.SignerInfos[0].DigestAlgorithm.Value : null;
+            return (certificates, cms.SignerInfos.Count, digest);
+        }
+        catch (CryptographicException exception)
+        {
+            throw new PeImageInspectionException(filePath, "PKCS#7", "The PKCS#7 signed-data payload is malformed.", exception);
+        }
     }
 
     private static PeExportInfo? ParseExports(PeImageInfo parsedImage, byte[] image)

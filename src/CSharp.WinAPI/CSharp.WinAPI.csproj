@@ -4,4 +4,7 @@
     <RootNamespace>CSharp.WinAPI</RootNamespace>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="8.0.0" />
+  </ItemGroup>
 </Project>
