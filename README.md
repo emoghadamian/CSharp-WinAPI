@@ -79,6 +79,10 @@ PE inspection also includes read-only normal Import Directory parsing for import
 
 See [PE import-directory inspection](docs/pe-imports.md).
 
+PE inspection also includes read-only Export Directory parsing for export DLL names, named/ordinal-only exports, public ordinals, and forwarded exports.
+
+See [PE export-directory inspection](docs/pe-exports.md).
+
 ## 🔐 Security APIs
 
 Implemented: read-only local-group and member enumeration.
@@ -174,6 +178,7 @@ The module targets Windows and uses Unicode Netapi32 APIs available since Window
 | Virtual memory | `VirtualQueryEx`, `MEMORY_BASIC_INFORMATION` | Yes | Yes | Yes |
 | PE images | PE32/PE32+ headers, sections, data directories, RVA mapping | Yes | Yes | Yes |
 | PE images | Import Directory, ILT/IAT, name and ordinal imports | Yes | Yes | Yes |
+| PE images | Export Directory, named/ordinal exports, forwarders | Yes | Yes | Yes |
 
 ## 🤝 Contributing
 

@@ -325,7 +325,7 @@ Run("PE parser exposes data directories", () => WithPeFixture(pe32Plus: false, p
 {
     var directories = peInspector.Inspect(path).DataDirectories;
     Assert(directories.Count == 16, "The standard data-directory table was incomplete.");
-    Assert(directories[0].Kind == PeDataDirectoryKind.ExportTable && directories[0].Address == 0x1000, "The export directory was incorrect.");
+    Assert(directories[0].Kind == PeDataDirectoryKind.ExportTable && directories[0].Address == 0x1200, "The export directory was incorrect.");
     Assert(directories[4].AddressIsFileOffset, "The certificate directory was not marked as a file offset.");
 }));
 
@@ -445,6 +445,87 @@ Run("PE parser detects delay-import metadata without merging it", () => WithPeFi
     Assert(image.Imports.Count == 2, "Delay imports were incorrectly merged with normal imports.");
 }, includeImports: true));
 
+Run("PE32 export fixture parses deterministically", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var exports = peInspector.Inspect(path).Exports;
+    Assert(exports is not null && exports.Name == "fixture.dll", "The PE32 export DLL name was incorrect.");
+    Assert(exports!.NumberOfFunctions == 3 && exports.NumberOfNames == 2, "The PE32 export counts were incorrect.");
+}));
+
+Run("PE32+ export fixture parses deterministically", () => WithPeFixture(pe32Plus: true, path =>
+{
+    var exports = peInspector.Inspect(path).Exports;
+    Assert(exports is not null && exports.Functions.Count == 3, "The PE32+ export table was not parsed.");
+}));
+
+Run("PE exports distinguish named and ordinal-only functions", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var functions = peInspector.Inspect(path).Exports!.Functions;
+    Assert(functions[0].Name == "NamedOne" && functions[0].IsNamed && functions[0].AddressRva == 0x1010, "The named export was incorrect.");
+    Assert(functions[2].Name is null && !functions[2].IsNamed && functions[2].AddressRva is null, "The ordinal-only export was incorrect.");
+}));
+
+Run("PE exports apply a non-zero ordinal base", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var functions = peInspector.Inspect(path).Exports!.Functions;
+    Assert(functions.Select(function => function.Ordinal).SequenceEqual(new uint[] { 10, 11, 12 }), "Public ordinals did not apply the ordinal base.");
+}));
+
+Run("PE exports detect named and ordinal forwarded functions", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var functions = peInspector.Inspect(path).Exports!.Functions;
+    Assert(functions[1].IsForwarded && functions[1].ForwarderName == "NTDLL.ForwardOne" && functions[1].AddressRva is null, $"The named forwarded export was incorrect: {functions[1]}.");
+    Assert(functions[2].IsForwarded && functions[2].ForwarderName == "KERNEL32.ForwardTwo", "The ordinal forwarded export was incorrect.");
+}));
+
+Run("PE parser rejects an invalid export directory RVA", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var bytes = File.ReadAllBytes(path);
+    WriteUInt32(bytes, 0xF8, 0xFFFF0000);
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Export directory");
+}));
+
+Run("PE parser rejects an invalid export function table RVA", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var bytes = File.ReadAllBytes(path);
+    WriteUInt32(bytes, 0x41C, 0xFFFF0000);
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Export address table");
+}));
+
+Run("PE parser rejects invalid export name pointers and ordinal indexes", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var bytes = File.ReadAllBytes(path);
+    WriteUInt32(bytes, 0x450, 0xFFFF0000);
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Export name");
+    bytes = BuildPeFixture(pe32Plus: false);
+    WriteUInt16(bytes, 0x460, 3);
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Export ordinal table");
+}));
+
+Run("PE parser rejects unterminated and truncated export directories", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var bytes = File.ReadAllBytes(path);
+    Array.Fill(bytes, (byte)'A', 0x470, 0x190);
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Export DLL name");
+    bytes = BuildPeFixture(pe32Plus: false);
+    WriteUInt32(bytes, 0xFC, 20);
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Export directory");
+}));
+
+Run("PE parser rejects overflowing public export ordinals", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var bytes = File.ReadAllBytes(path);
+    WriteUInt32(bytes, 0x410, uint.MaxValue);
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Export address table");
+}));
+
 return failures.Count == 0 ? 0 : 1;
 
 void Run(string name, Action test)
@@ -553,8 +634,8 @@ static byte[] BuildPeFixture(bool pe32Plus, bool includeImports = false)
     }
 
     var directoryOffset = optionalOffset + (pe32Plus ? 112 : 96);
-    WriteUInt32(image, directoryOffset, 0x1000);
-    WriteUInt32(image, directoryOffset + 4, 0x20);
+    WriteUInt32(image, directoryOffset, 0x1200);
+    WriteUInt32(image, directoryOffset + 4, 0xA0);
     if (includeImports)
     {
         WriteUInt32(image, directoryOffset + 8, 0x1100);
@@ -574,7 +655,36 @@ static byte[] BuildPeFixture(bool pe32Plus, bool includeImports = false)
         AddImportFixtureData(image, pe32Plus);
     }
 
+    AddExportFixtureData(image);
+
     return image;
+}
+
+static void AddExportFixtureData(byte[] image)
+{
+    WriteUInt32(image, 0x400, 0xCAFEBABE);
+    WriteUInt32(image, 0x404, 1_700_000_001);
+    WriteUInt16(image, 0x408, 1);
+    WriteUInt16(image, 0x40A, 2);
+    WriteUInt32(image, 0x40C, 0x1270);
+    WriteUInt32(image, 0x410, 10);
+    WriteUInt32(image, 0x414, 3);
+    WriteUInt32(image, 0x418, 2);
+    WriteUInt32(image, 0x41C, 0x1240);
+    WriteUInt32(image, 0x420, 0x1250);
+    WriteUInt32(image, 0x424, 0x1260);
+    WriteUInt32(image, 0x440, 0x1010);
+    WriteUInt32(image, 0x444, 0x1280);
+    WriteUInt32(image, 0x448, 0x1292);
+    WriteUInt32(image, 0x450, 0x12C0);
+    WriteUInt32(image, 0x454, 0x12D0);
+    WriteUInt16(image, 0x460, 0);
+    WriteUInt16(image, 0x462, 1);
+    "fixture.dll\0"u8.CopyTo(image.AsSpan(0x470));
+    "NTDLL.ForwardOne\0"u8.CopyTo(image.AsSpan(0x480));
+    "KERNEL32.ForwardTwo\0"u8.CopyTo(image.AsSpan(0x492));
+    "NamedOne\0"u8.CopyTo(image.AsSpan(0x4C0));
+    "ForwardNamed\0"u8.CopyTo(image.AsSpan(0x4D0));
 }
 
 static void AddImportFixtureData(byte[] image, bool pe32Plus)

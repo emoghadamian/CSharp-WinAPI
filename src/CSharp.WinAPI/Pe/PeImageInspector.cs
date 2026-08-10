@@ -15,6 +15,8 @@ public sealed class PeImageInspector
     private const int MaximumImportDescriptorCount = 4_096;
     private const int MaximumImportsPerModule = 16_384;
     private const int MaximumImportStringLength = 1_024;
+    private const int ExportDirectoryLength = 40;
+    private const int MaximumExportFunctionCount = 65_536;
 
     /// <summary>Inspects a PE file from disk without loading, executing, or modifying it.</summary>
     /// <exception cref="PeImageInspectionException">Thrown when the path cannot be read or the file is malformed.</exception>
@@ -177,7 +179,110 @@ public sealed class PeImageInspector
             directories);
 
         parsedImage.SetImports(ParseImports(parsedImage, image));
+        parsedImage.SetExports(ParseExports(parsedImage, image));
         return parsedImage;
+    }
+
+    private static PeExportInfo? ParseExports(PeImageInfo parsedImage, byte[] image)
+    {
+        var exportDirectory = parsedImage.DataDirectories.FirstOrDefault(directory => directory.Kind == PeDataDirectoryKind.ExportTable);
+
+        if (exportDirectory is null || (exportDirectory.Address == 0 && exportDirectory.Size == 0))
+        {
+            return null;
+        }
+
+        if (exportDirectory.Address == 0 || exportDirectory.Size < ExportDirectoryLength)
+        {
+            throw new PeImageInspectionException(parsedImage.FilePath, "Export directory", "The export directory has an invalid RVA or size.");
+        }
+
+        var directoryOffset = MapRva(parsedImage, exportDirectory.Address, "Export directory");
+        var characteristics = ReadUInt32(image, directoryOffset, parsedImage.FilePath, "Export directory");
+        var timestamp = ReadUInt32(image, checked(directoryOffset + 4U), parsedImage.FilePath, "Export directory");
+        var majorVersion = ReadUInt16(image, checked(directoryOffset + 8U), parsedImage.FilePath, "Export directory");
+        var minorVersion = ReadUInt16(image, checked(directoryOffset + 10U), parsedImage.FilePath, "Export directory");
+        var nameRva = ReadUInt32(image, checked(directoryOffset + 12U), parsedImage.FilePath, "Export directory");
+        var ordinalBase = ReadUInt32(image, checked(directoryOffset + 16U), parsedImage.FilePath, "Export directory");
+        var numberOfFunctions = ReadUInt32(image, checked(directoryOffset + 20U), parsedImage.FilePath, "Export directory");
+        var numberOfNames = ReadUInt32(image, checked(directoryOffset + 24U), parsedImage.FilePath, "Export directory");
+        var addressOfFunctions = ReadUInt32(image, checked(directoryOffset + 28U), parsedImage.FilePath, "Export directory");
+        var addressOfNames = ReadUInt32(image, checked(directoryOffset + 32U), parsedImage.FilePath, "Export directory");
+        var addressOfNameOrdinals = ReadUInt32(image, checked(directoryOffset + 36U), parsedImage.FilePath, "Export directory");
+
+        if (nameRva == 0 || numberOfFunctions > MaximumExportFunctionCount || numberOfNames > numberOfFunctions || addressOfFunctions == 0 || (numberOfNames > 0 && (addressOfNames == 0 || addressOfNameOrdinals == 0)))
+        {
+            throw new PeImageInspectionException(parsedImage.FilePath, "Export directory", "The export-directory counts or table RVAs are invalid.");
+        }
+
+        var imageName = ReadNullTerminatedAscii(parsedImage, image, nameRva, "Export DLL name");
+        var namesByFunctionIndex = ParseExportNames(parsedImage, image, numberOfFunctions, numberOfNames, addressOfNames, addressOfNameOrdinals);
+        var functions = ParseExportFunctions(parsedImage, image, exportDirectory, ordinalBase, numberOfFunctions, addressOfFunctions, namesByFunctionIndex);
+
+        return new PeExportInfo(
+            characteristics,
+            timestamp,
+            majorVersion,
+            minorVersion,
+            imageName,
+            ordinalBase,
+            numberOfFunctions,
+            numberOfNames,
+            addressOfFunctions,
+            addressOfNames,
+            addressOfNameOrdinals,
+            functions);
+    }
+
+    private static string?[] ParseExportNames(PeImageInfo parsedImage, byte[] image, uint numberOfFunctions, uint numberOfNames, uint addressOfNames, uint addressOfNameOrdinals)
+    {
+        var namesByFunctionIndex = new string?[(int)numberOfFunctions];
+
+        for (var nameIndex = 0U; nameIndex < numberOfNames; nameIndex++)
+        {
+            var namePointerRva = AddRva(addressOfNames, (ulong)nameIndex * sizeof(uint), parsedImage.FilePath, "Export name pointer table");
+            var ordinalRva = AddRva(addressOfNameOrdinals, (ulong)nameIndex * sizeof(ushort), parsedImage.FilePath, "Export ordinal table");
+            var nameRva = ReadUInt32(image, MapRva(parsedImage, namePointerRva, "Export name pointer table"), parsedImage.FilePath, "Export name pointer table");
+            var functionIndex = ReadUInt16(image, MapRva(parsedImage, ordinalRva, "Export ordinal table"), parsedImage.FilePath, "Export ordinal table");
+
+            if (functionIndex >= numberOfFunctions || nameRva == 0)
+            {
+                throw new PeImageInspectionException(parsedImage.FilePath, "Export ordinal table", "A named export references an invalid function index or name RVA.");
+            }
+
+            if (namesByFunctionIndex[(int)functionIndex] is not null)
+            {
+                throw new PeImageInspectionException(parsedImage.FilePath, "Export ordinal table", "Multiple export names reference the same function index.");
+            }
+
+            namesByFunctionIndex[(int)functionIndex] = ReadNullTerminatedAscii(parsedImage, image, nameRva, "Export name");
+        }
+
+        return namesByFunctionIndex;
+    }
+
+    private static IReadOnlyList<PeExportFunctionInfo> ParseExportFunctions(PeImageInfo parsedImage, byte[] image, PeDataDirectoryInfo exportDirectory, uint ordinalBase, uint numberOfFunctions, uint addressOfFunctions, string?[] namesByFunctionIndex)
+    {
+        var functions = new List<PeExportFunctionInfo>((int)numberOfFunctions);
+        var forwarderRangeEnd = (ulong)exportDirectory.Address + exportDirectory.Size;
+
+        for (var functionIndex = 0U; functionIndex < numberOfFunctions; functionIndex++)
+        {
+            var addressRva = AddRva(addressOfFunctions, (ulong)functionIndex * sizeof(uint), parsedImage.FilePath, "Export address table");
+            var functionRva = ReadUInt32(image, MapRva(parsedImage, addressRva, "Export address table"), parsedImage.FilePath, "Export address table");
+            var ordinal = (ulong)ordinalBase + functionIndex;
+
+            if (ordinal > uint.MaxValue)
+            {
+                throw new PeImageInspectionException(parsedImage.FilePath, "Export address table", "The public export ordinal overflows 32 bits.");
+            }
+
+            var isForwarded = functionRva != 0 && functionRva >= exportDirectory.Address && functionRva < forwarderRangeEnd;
+            var forwarderName = isForwarded ? ReadNullTerminatedAscii(parsedImage, image, functionRva, "Export forwarder") : null;
+            functions.Add(new PeExportFunctionInfo(namesByFunctionIndex[(int)functionIndex], (uint)ordinal, isForwarded || functionRva == 0 ? null : functionRva, namesByFunctionIndex[(int)functionIndex] is not null, isForwarded, forwarderName));
+        }
+
+        return functions;
     }
 
     private static IReadOnlyList<PeImportModuleInfo> ParseImports(PeImageInfo parsedImage, byte[] image)

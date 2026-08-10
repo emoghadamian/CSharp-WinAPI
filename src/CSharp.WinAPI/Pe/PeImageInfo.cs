@@ -6,6 +6,7 @@ public sealed class PeImageInfo
     private readonly IReadOnlyList<PeSectionInfo> sections;
     private readonly IReadOnlyList<PeDataDirectoryInfo> dataDirectories;
     private IReadOnlyList<PeImportModuleInfo> imports = Array.Empty<PeImportModuleInfo>();
+    private PeExportInfo? exports;
 
     internal PeImageInfo(
         string filePath,
@@ -141,8 +142,11 @@ public sealed class PeImageInfo
     public IReadOnlyList<PeImportModuleInfo> Imports => imports;
     /// <summary>Gets whether the delay-import directory is present; delay-import contents are not parsed in this phase.</summary>
     public bool HasDelayImports => dataDirectories.Any(directory => directory.Kind == PeDataDirectoryKind.DelayImport && directory.IsPresent);
+    /// <summary>Gets normal export-directory metadata, or null when the image has no export directory.</summary>
+    public PeExportInfo? Exports => exports;
 
     internal void SetImports(IReadOnlyList<PeImportModuleInfo> parsedImports) => imports = parsedImports;
+    internal void SetExports(PeExportInfo? parsedExports) => exports = parsedExports;
 
     /// <summary>Converts an RVA to its corresponding on-disk file offset.</summary>
     /// <exception cref="PeImageInspectionException">Thrown when the RVA has no raw-data representation in this image.</exception>

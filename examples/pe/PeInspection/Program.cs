@@ -63,6 +63,33 @@ try
     }
 
     Console.WriteLine("Imports are static PE metadata and do not prove these APIs were executed.");
+
+    Console.WriteLine();
+
+    if (image.Exports is null)
+    {
+        Console.WriteLine("Exports: none");
+    }
+    else
+    {
+        var exports = image.Exports;
+        Console.WriteLine($"Exports: {exports.Name}; functions {exports.NumberOfFunctions}; named {exports.NumberOfNames}");
+        Console.WriteLine($"Ordinal-only: {exports.Functions.Count(function => !function.IsNamed)}; forwarded: {exports.Functions.Count(function => function.IsForwarded)}");
+
+        foreach (var function in exports.Functions.Take(80))
+        {
+            var displayName = function.Name ?? $"ordinal #{function.Ordinal}";
+            var destination = function.IsForwarded ? $" -> {function.ForwarderName}" : string.Empty;
+            Console.WriteLine($"  {displayName}{destination}");
+        }
+
+        if (exports.Functions.Count > 80)
+        {
+            Console.WriteLine($"  ... {exports.Functions.Count - 80} additional exports not displayed.");
+        }
+    }
+
+    Console.WriteLine("Imports are APIs required by an image; exports are APIs it exposes. Both are metadata, not proof of execution.");
 }
 catch (PeImageInspectionException exception)
 {

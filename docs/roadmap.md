@@ -19,5 +19,5 @@
 ## Advanced
 
 - token privileges and integrity levels
-- export-directory content and PE signature analysis
+- PE signature analysis
 - documented versus NT-native API compatibility boundaries
