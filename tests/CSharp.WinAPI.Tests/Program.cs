@@ -1,6 +1,7 @@
 using CSharp.WinAPI.LocalGroups;
 using CSharp.WinAPI.Memory;
 using CSharp.WinAPI.Modules;
+using CSharp.WinAPI.Pe;
 using CSharp.WinAPI.Processes;
 using CSharp.WinAPI.Threads;
 
@@ -261,6 +262,110 @@ Run("virtual-memory inspection can be repeated without retaining handles", () =>
     }
 });
 
+var peInspector = new PeImageInspector();
+
+Run("PE32 fixture parses deterministically", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var image = peInspector.Inspect(path);
+    Assert(image.Format == PeImageFormat.Pe32, "The PE32 fixture was not detected as PE32.");
+    Assert(image.ImageBase == 0x00400000, "The PE32 image base was incorrect.");
+}));
+
+Run("PE32+ fixture parses deterministically", () => WithPeFixture(pe32Plus: true, path =>
+{
+    var image = peInspector.Inspect(path);
+    Assert(image.Format == PeImageFormat.Pe32Plus, "The PE32+ fixture was not detected as PE32+.");
+    Assert(image.ImageBase == 0x0000000140000000, "The PE32+ image base was incorrect.");
+}));
+
+Run("PE parser validates MZ signature", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var bytes = File.ReadAllBytes(path);
+    bytes[0] = 0;
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "DOS header");
+}));
+
+Run("PE parser validates PE signature", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var bytes = File.ReadAllBytes(path);
+    bytes[0x80] = 0;
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "PE header");
+}));
+
+Run("PE parser preserves known and unknown machine values", () => WithPeFixture(pe32Plus: true, path =>
+{
+    var image = peInspector.Inspect(path);
+    Assert(image.Machine == 0x8664 && image.Architecture == PeMachineArchitecture.Amd64, "AMD64 was not detected.");
+    var bytes = File.ReadAllBytes(path);
+    WriteUInt16(bytes, 0x84, 0xFFFF);
+    File.WriteAllBytes(path, bytes);
+    image = peInspector.Inspect(path);
+    Assert(image.Machine == 0xFFFF && image.Architecture == PeMachineArchitecture.Unknown, "An unknown machine was not preserved.");
+}));
+
+Run("PE parser detects optional-header format", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var bytes = File.ReadAllBytes(path);
+    WriteUInt16(bytes, 0x98, 0x7777);
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Optional header");
+}));
+
+Run("PE parser exposes section headers", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var section = peInspector.Inspect(path).Sections.Single();
+    Assert(section.Name == ".text", "The deterministic section name was incorrect.");
+    Assert(section.VirtualAddress == 0x1000 && section.PointerToRawData == 0x200, "The deterministic section mapping was incorrect.");
+    Assert(section.Characteristics.HasFlag(PeSectionCharacteristics.MemoryExecute), "The executable section characteristic was missing.");
+}));
+
+Run("PE parser exposes data directories", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var directories = peInspector.Inspect(path).DataDirectories;
+    Assert(directories.Count == 16, "The standard data-directory table was incomplete.");
+    Assert(directories[0].Kind == PeDataDirectoryKind.ExportTable && directories[0].Address == 0x1000, "The export directory was incorrect.");
+    Assert(directories[4].AddressIsFileOffset, "The certificate directory was not marked as a file offset.");
+}));
+
+Run("PE RVA mapping handles headers sections and invalid RVAs", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var image = peInspector.Inspect(path);
+    Assert(image.GetFileOffsetForRva(0x100) == 0x100, "Header RVA mapping was incorrect.");
+    Assert(image.GetFileOffsetForRva(0x1010) == 0x210, "Section RVA mapping was incorrect.");
+    Assert(!image.TryGetFileOffsetForRva(0x1200, out _), "An RVA beyond raw data mapped unexpectedly.");
+    AssertPeFailure(() => image.GetFileOffsetForRva(0x1200), "RVA mapping");
+}));
+
+Run("PE parser rejects truncated images", () => WithPeFixture(pe32Plus: false, path =>
+{
+    File.WriteAllBytes(path, File.ReadAllBytes(path).Take(0x90).ToArray());
+    AssertPeFailure(() => peInspector.Inspect(path), "PE header");
+}));
+
+Run("PE parser rejects overflowing header offsets", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var bytes = File.ReadAllBytes(path);
+    WriteUInt32(bytes, 0x3C, uint.MaxValue);
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "PE header");
+}));
+
+Run("PE parser rejects invalid section raw-data bounds", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var bytes = File.ReadAllBytes(path);
+    WriteUInt32(bytes, 0x178 + 20, 0xFFFF0000);
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Section raw data");
+}));
+
+Run("PE parser rejects empty and invalid paths", () =>
+{
+    AssertPeFailure(() => peInspector.Inspect(string.Empty), "Path");
+    AssertPeFailure(() => peInspector.Inspect(Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}.exe")), "Path");
+});
+
 return failures.Count == 0 ? 0 : 1;
 
 void Run(string name, Action test)
@@ -284,3 +389,109 @@ static void Assert(bool condition, string message)
         throw new InvalidOperationException(message);
     }
 }
+
+static void WithPeFixture(bool pe32Plus, Action<string> test)
+{
+    var path = Path.Combine(Path.GetTempPath(), $"CSharp-WinAPI-PeFixture-{Guid.NewGuid():N}.bin");
+    File.WriteAllBytes(path, BuildPeFixture(pe32Plus));
+
+    try
+    {
+        test(path);
+    }
+    finally
+    {
+        File.Delete(path);
+    }
+}
+
+static void AssertPeFailure(Action action, string expectedStage)
+{
+    try
+    {
+        action();
+        throw new InvalidOperationException("The malformed PE unexpectedly parsed successfully.");
+    }
+    catch (PeImageInspectionException exception)
+    {
+        Assert(exception.Stage == expectedStage, $"Expected PE failure at {expectedStage}, got {exception.Stage}.");
+    }
+}
+
+static byte[] BuildPeFixture(bool pe32Plus)
+{
+    var image = new byte[0x400];
+    image[0] = (byte)'M';
+    image[1] = (byte)'Z';
+    WriteUInt32(image, 0x3C, 0x80);
+    WriteUInt32(image, 0x80, 0x00004550);
+    var coffOffset = 0x84;
+    WriteUInt16(image, coffOffset, pe32Plus ? (ushort)0x8664 : (ushort)0x014C);
+    WriteUInt16(image, coffOffset + 2, 1);
+    WriteUInt32(image, coffOffset + 4, 1_700_000_000);
+    WriteUInt16(image, coffOffset + 16, pe32Plus ? (ushort)0xF0 : (ushort)0xE0);
+    WriteUInt16(image, coffOffset + 18, 0x0002);
+    var optionalOffset = 0x98;
+    WriteUInt16(image, optionalOffset, pe32Plus ? (ushort)0x020B : (ushort)0x010B);
+    image[optionalOffset + 2] = 14;
+    image[optionalOffset + 3] = 29;
+    WriteUInt32(image, optionalOffset + 4, 0x200);
+    WriteUInt32(image, optionalOffset + 8, 0x200);
+    WriteUInt32(image, optionalOffset + 16, 0x1000);
+    WriteUInt32(image, optionalOffset + 20, 0x1000);
+    if (pe32Plus)
+    {
+        WriteUInt64(image, optionalOffset + 24, 0x0000000140000000);
+    }
+    else
+    {
+        WriteUInt32(image, optionalOffset + 24, 0x2000);
+        WriteUInt32(image, optionalOffset + 28, 0x00400000);
+    }
+
+    WriteUInt32(image, optionalOffset + 32, 0x1000);
+    WriteUInt32(image, optionalOffset + 36, 0x200);
+    WriteUInt32(image, optionalOffset + 56, 0x2000);
+    WriteUInt32(image, optionalOffset + 60, 0x200);
+    WriteUInt16(image, optionalOffset + 68, 3);
+    WriteUInt16(image, optionalOffset + 70, 0x0140);
+    var sizeOffset = pe32Plus ? 72 : 72;
+    if (pe32Plus)
+    {
+        WriteUInt64(image, sizeOffset, 0x100000);
+        WriteUInt64(image, sizeOffset + 8, 0x1000);
+        WriteUInt64(image, sizeOffset + 16, 0x100000);
+        WriteUInt64(image, sizeOffset + 24, 0x1000);
+        WriteUInt32(image, optionalOffset + 108, 16);
+    }
+    else
+    {
+        WriteUInt32(image, sizeOffset, 0x100000);
+        WriteUInt32(image, sizeOffset + 4, 0x1000);
+        WriteUInt32(image, sizeOffset + 8, 0x100000);
+        WriteUInt32(image, sizeOffset + 12, 0x1000);
+        WriteUInt32(image, optionalOffset + 92, 16);
+    }
+
+    var directoryOffset = optionalOffset + (pe32Plus ? 112 : 96);
+    WriteUInt32(image, directoryOffset, 0x1000);
+    WriteUInt32(image, directoryOffset + 4, 0x20);
+    WriteUInt32(image, directoryOffset + 8, 0x1020);
+    WriteUInt32(image, directoryOffset + 12, 0x20);
+    WriteUInt32(image, directoryOffset + (4 * 8), 0x300);
+    WriteUInt32(image, directoryOffset + (4 * 8) + 4, 0x40);
+    var sectionOffset = optionalOffset + (pe32Plus ? 0xF0 : 0xE0);
+    ".text"u8.CopyTo(image.AsSpan(sectionOffset, 5));
+    WriteUInt32(image, sectionOffset + 8, 0x180);
+    WriteUInt32(image, sectionOffset + 12, 0x1000);
+    WriteUInt32(image, sectionOffset + 16, 0x200);
+    WriteUInt32(image, sectionOffset + 20, 0x200);
+    WriteUInt32(image, sectionOffset + 36, 0x60000020);
+    return image;
+}
+
+static void WriteUInt16(byte[] buffer, int offset, ushort value) => System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(offset), value);
+
+static void WriteUInt32(byte[] buffer, int offset, uint value) => System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(offset), value);
+
+static void WriteUInt64(byte[] buffer, int offset, ulong value) => System.Buffers.Binary.BinaryPrimitives.WriteUInt64LittleEndian(buffer.AsSpan(offset), value);

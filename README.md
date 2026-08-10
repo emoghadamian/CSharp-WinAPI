@@ -69,6 +69,12 @@ Implemented read-only Toolhelp module enumeration through `Module32FirstW` and `
 
 See [Module and DLL inspection](docs/modules.md).
 
+## 🧱 PE Image APIs
+
+Implemented read-only on-disk PE inspection for validated PE32 and PE32+ headers, sections, data directories, and RVA-to-file-offset mapping. The parser does not load, execute, or modify images.
+
+See [PE image inspection](docs/pe.md).
+
 ## 🔐 Security APIs
 
 Implemented: read-only local-group and member enumeration.
@@ -94,12 +100,14 @@ src/CSharp.WinAPI/                 reusable library
   Threads/                         managed read-only thread abstraction
   Modules/                         managed read-only module abstraction
   Memory/                          managed read-only virtual-memory metadata abstraction
+  Pe/                              managed read-only executable-image parsing
 examples/learning/                 minimal interop demonstrations
 examples/security/                 defensive investigation examples
 examples/processes/                process inspection examples
 examples/threads/                  thread inspection examples
 examples/modules/                  module and DLL inspection examples
 examples/memory/                   virtual-memory inspection examples
+examples/pe/                       executable-image inspection examples
 tests/CSharp.WinAPI.Tests/         dependency-free executable integration tests
 docs/                              interop guidance, security notes, and roadmap
 ```
@@ -131,7 +139,8 @@ dotnet run --project tests/CSharp.WinAPI.Tests --configuration Debug
 5. `examples/threads/ThreadEnumeration` — Toolhelp thread snapshots and process-to-thread relationships.
 6. `examples/modules/ModuleEnumeration` — module snapshots, addresses, and cross-architecture limits.
 7. `examples/memory/VirtualMemoryInspection` — virtual-memory region metadata and safe traversal.
-8. See the [full roadmap](docs/roadmap.md).
+8. `examples/pe/PeInspection` — PE headers, sections, directories, and RVA mapping.
+9. See the [full roadmap](docs/roadmap.md).
 
 ## ⚠️ Privileges & Windows Version Considerations
 
@@ -159,6 +168,7 @@ The module targets Windows and uses Unicode Netapi32 APIs available since Window
 | Modules | `Module32FirstW`, `Module32NextW`, `MODULEENTRY32W` | Yes | Yes | Yes |
 | Virtual memory | `OpenProcess` with `PROCESS_QUERY_INFORMATION` | Yes | Yes | Yes |
 | Virtual memory | `VirtualQueryEx`, `MEMORY_BASIC_INFORMATION` | Yes | Yes | Yes |
+| PE images | PE32/PE32+ headers, sections, data directories, RVA mapping | Yes | Yes | Yes |
 
 ## 🤝 Contributing
 

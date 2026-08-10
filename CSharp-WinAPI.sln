@@ -20,6 +20,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ModuleEnumeration", "exampl
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VirtualMemoryInspection", "examples\memory\VirtualMemoryInspection\VirtualMemoryInspection.csproj", "{74CF2730-D7DC-4537-8263-166CB3D5B0C2}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PeInspection", "examples\pe\PeInspection\PeInspection.csproj", "{AC29369D-BEAC-4C01-AFCB-0CC6F4534019}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -62,5 +64,9 @@ Global
 		{74CF2730-D7DC-4537-8263-166CB3D5B0C2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{74CF2730-D7DC-4537-8263-166CB3D5B0C2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{74CF2730-D7DC-4537-8263-166CB3D5B0C2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AC29369D-BEAC-4C01-AFCB-0CC6F4534019}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AC29369D-BEAC-4C01-AFCB-0CC6F4534019}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AC29369D-BEAC-4C01-AFCB-0CC6F4534019}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AC29369D-BEAC-4C01-AFCB-0CC6F4534019}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
