@@ -75,6 +75,10 @@ Implemented read-only on-disk PE inspection for validated PE32 and PE32+ headers
 
 See [PE image inspection](docs/pe.md).
 
+PE inspection also includes read-only normal Import Directory parsing for imported DLLs, name/ordinal imports, hints, ILT/IAT RVAs, and delay-import presence detection.
+
+See [PE import-directory inspection](docs/pe-imports.md).
+
 ## 🔐 Security APIs
 
 Implemented: read-only local-group and member enumeration.
@@ -169,6 +173,7 @@ The module targets Windows and uses Unicode Netapi32 APIs available since Window
 | Virtual memory | `OpenProcess` with `PROCESS_QUERY_INFORMATION` | Yes | Yes | Yes |
 | Virtual memory | `VirtualQueryEx`, `MEMORY_BASIC_INFORMATION` | Yes | Yes | Yes |
 | PE images | PE32/PE32+ headers, sections, data directories, RVA mapping | Yes | Yes | Yes |
+| PE images | Import Directory, ILT/IAT, name and ordinal imports | Yes | Yes | Yes |
 
 ## 🤝 Contributing
 

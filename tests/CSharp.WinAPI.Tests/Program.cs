@@ -334,8 +334,8 @@ Run("PE RVA mapping handles headers sections and invalid RVAs", () => WithPeFixt
     var image = peInspector.Inspect(path);
     Assert(image.GetFileOffsetForRva(0x100) == 0x100, "Header RVA mapping was incorrect.");
     Assert(image.GetFileOffsetForRva(0x1010) == 0x210, "Section RVA mapping was incorrect.");
-    Assert(!image.TryGetFileOffsetForRva(0x1200, out _), "An RVA beyond raw data mapped unexpectedly.");
-    AssertPeFailure(() => image.GetFileOffsetForRva(0x1200), "RVA mapping");
+    Assert(!image.TryGetFileOffsetForRva(0x1400, out _), "An RVA beyond raw data mapped unexpectedly.");
+    AssertPeFailure(() => image.GetFileOffsetForRva(0x1400), "RVA mapping");
 }));
 
 Run("PE parser rejects truncated images", () => WithPeFixture(pe32Plus: false, path =>
@@ -366,6 +366,85 @@ Run("PE parser rejects empty and invalid paths", () =>
     AssertPeFailure(() => peInspector.Inspect(Path.Combine(Path.GetTempPath(), $"missing-{Guid.NewGuid():N}.exe")), "Path");
 });
 
+Run("PE32 import fixture resolves multiple modules and functions", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var imports = peInspector.Inspect(path).Imports;
+    Assert(imports.Count == 2, "The PE32 import fixture did not expose two DLLs.");
+    Assert(imports[0].Name == "KERNEL32.dll" && imports[0].Functions.Count == 2, "The first PE32 import module was incorrect.");
+    Assert(imports[1].Name == "ADVAPI32.dll" && imports[1].Functions.Single().Name == "RegOpenKeyExW", "The second PE32 import module was incorrect.");
+}, includeImports: true));
+
+Run("PE32+ import fixture uses 64-bit thunk values", () => WithPeFixture(pe32Plus: true, path =>
+{
+    var firstImport = peInspector.Inspect(path).Imports.Single(module => module.Name == "KERNEL32.dll");
+    Assert(firstImport.Functions[0].Name == "CreateFileW", "The PE32+ name import was incorrect.");
+    Assert(firstImport.Functions[0].LookupTableRva == 0x1140 && firstImport.Functions[0].ImportAddressTableRva == 0x1160, "The PE32+ thunk RVAs were incorrect.");
+}, includeImports: true));
+
+Run("PE imports retain names hints and ordinal imports", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var functions = peInspector.Inspect(path).Imports.Single(module => module.Name == "KERNEL32.dll").Functions;
+    Assert(functions[0].Name == "CreateFileW" && functions[0].Hint == 0x1234 && !functions[0].IsOrdinal, "The import-by-name metadata was incorrect.");
+    Assert(functions[1].Name is null && functions[1].Ordinal == 5 && functions[1].IsOrdinal && functions[1].Hint is null, "The import-by-ordinal metadata was incorrect.");
+}, includeImports: true));
+
+Run("PE parser rejects an invalid import directory RVA", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var bytes = File.ReadAllBytes(path);
+    WriteUInt32(bytes, 0x100, 0xFFFF0000);
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Import directory");
+}, includeImports: true));
+
+Run("PE parser rejects a truncated import descriptor table", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var bytes = File.ReadAllBytes(path);
+    WriteUInt32(bytes, 0x104, 20);
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Import directory");
+}, includeImports: true));
+
+Run("PE parser rejects an unterminated import DLL name", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var bytes = File.ReadAllBytes(path);
+    Array.Fill(bytes, (byte)'A', 0x380, 0x280);
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Import DLL name");
+}, includeImports: true));
+
+Run("PE parser rejects an unterminated thunk table", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var bytes = File.ReadAllBytes(path);
+    WriteUInt32(bytes, 0x310, 0x1140);
+
+    for (var offset = 0x340; offset < 0x600; offset += 4)
+    {
+        WriteUInt32(bytes, offset, 0x1190);
+    }
+
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Import lookup table");
+}, includeImports: true));
+
+Run("PE parser rejects an invalid import hint/name RVA", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var bytes = File.ReadAllBytes(path);
+    WriteUInt32(bytes, 0x340, 0x7FFF0000);
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Import hint/name");
+}, includeImports: true));
+
+Run("PE parser detects delay-import metadata without merging it", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var bytes = File.ReadAllBytes(path);
+    WriteUInt32(bytes, 0x98 + 96 + (13 * 8), 0x1100);
+    WriteUInt32(bytes, 0x98 + 96 + (13 * 8) + 4, 0x20);
+    File.WriteAllBytes(path, bytes);
+    var image = peInspector.Inspect(path);
+    Assert(image.HasDelayImports, "The delay-import directory was not detected.");
+    Assert(image.Imports.Count == 2, "Delay imports were incorrectly merged with normal imports.");
+}, includeImports: true));
+
 return failures.Count == 0 ? 0 : 1;
 
 void Run(string name, Action test)
@@ -390,10 +469,10 @@ static void Assert(bool condition, string message)
     }
 }
 
-static void WithPeFixture(bool pe32Plus, Action<string> test)
+static void WithPeFixture(bool pe32Plus, Action<string> test, bool includeImports = false)
 {
     var path = Path.Combine(Path.GetTempPath(), $"CSharp-WinAPI-PeFixture-{Guid.NewGuid():N}.bin");
-    File.WriteAllBytes(path, BuildPeFixture(pe32Plus));
+    File.WriteAllBytes(path, BuildPeFixture(pe32Plus, includeImports));
 
     try
     {
@@ -418,9 +497,9 @@ static void AssertPeFailure(Action action, string expectedStage)
     }
 }
 
-static byte[] BuildPeFixture(bool pe32Plus)
+static byte[] BuildPeFixture(bool pe32Plus, bool includeImports = false)
 {
-    var image = new byte[0x400];
+    var image = new byte[0x600];
     image[0] = (byte)'M';
     image[1] = (byte)'Z';
     WriteUInt32(image, 0x3C, 0x80);
@@ -476,18 +555,51 @@ static byte[] BuildPeFixture(bool pe32Plus)
     var directoryOffset = optionalOffset + (pe32Plus ? 112 : 96);
     WriteUInt32(image, directoryOffset, 0x1000);
     WriteUInt32(image, directoryOffset + 4, 0x20);
-    WriteUInt32(image, directoryOffset + 8, 0x1020);
-    WriteUInt32(image, directoryOffset + 12, 0x20);
+    if (includeImports)
+    {
+        WriteUInt32(image, directoryOffset + 8, 0x1100);
+        WriteUInt32(image, directoryOffset + 12, 0x3C);
+    }
     WriteUInt32(image, directoryOffset + (4 * 8), 0x300);
     WriteUInt32(image, directoryOffset + (4 * 8) + 4, 0x40);
     var sectionOffset = optionalOffset + (pe32Plus ? 0xF0 : 0xE0);
     ".text"u8.CopyTo(image.AsSpan(sectionOffset, 5));
-    WriteUInt32(image, sectionOffset + 8, 0x180);
+    WriteUInt32(image, sectionOffset + 8, 0x400);
     WriteUInt32(image, sectionOffset + 12, 0x1000);
-    WriteUInt32(image, sectionOffset + 16, 0x200);
+    WriteUInt32(image, sectionOffset + 16, 0x400);
     WriteUInt32(image, sectionOffset + 20, 0x200);
     WriteUInt32(image, sectionOffset + 36, 0x60000020);
+    if (includeImports)
+    {
+        AddImportFixtureData(image, pe32Plus);
+    }
+
     return image;
+}
+
+static void AddImportFixtureData(byte[] image, bool pe32Plus)
+{
+    var width = pe32Plus ? 8 : 4;
+    WriteUInt32(image, 0x300, 0x1140);
+    WriteUInt32(image, 0x304, 0x11111111);
+    WriteUInt32(image, 0x308, 0xFFFFFFFF);
+    WriteUInt32(image, 0x30C, 0x1180);
+    WriteUInt32(image, 0x310, 0x1160);
+    WriteUInt32(image, 0x314, 0x11A0);
+    WriteUInt32(image, 0x320, 0x11C0);
+    WriteUInt32(image, 0x324, 0x11B0);
+    WriteThunk(image, 0x340, 0x1190, pe32Plus);
+    WriteThunk(image, 0x340 + width, pe32Plus ? 0x8000000000000005UL : 0x80000005UL, pe32Plus);
+    WriteThunk(image, 0x360, 0x1190, pe32Plus);
+    WriteThunk(image, 0x360 + width, pe32Plus ? 0x8000000000000005UL : 0x80000005UL, pe32Plus);
+    WriteThunk(image, 0x3A0, 0x11D0, pe32Plus);
+    WriteThunk(image, 0x3B0, 0x11D0, pe32Plus);
+    "KERNEL32.dll\0"u8.CopyTo(image.AsSpan(0x380));
+    WriteUInt16(image, 0x390, 0x1234);
+    "CreateFileW\0"u8.CopyTo(image.AsSpan(0x392));
+    "ADVAPI32.dll\0"u8.CopyTo(image.AsSpan(0x3C0));
+    WriteUInt16(image, 0x3D0, 4);
+    "RegOpenKeyExW\0"u8.CopyTo(image.AsSpan(0x3D2));
 }
 
 static void WriteUInt16(byte[] buffer, int offset, ushort value) => System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(offset), value);
@@ -495,3 +607,15 @@ static void WriteUInt16(byte[] buffer, int offset, ushort value) => System.Buffe
 static void WriteUInt32(byte[] buffer, int offset, uint value) => System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(offset), value);
 
 static void WriteUInt64(byte[] buffer, int offset, ulong value) => System.Buffers.Binary.BinaryPrimitives.WriteUInt64LittleEndian(buffer.AsSpan(offset), value);
+
+static void WriteThunk(byte[] buffer, int offset, ulong value, bool pe32Plus)
+{
+    if (pe32Plus)
+    {
+        WriteUInt64(buffer, offset, value);
+    }
+    else
+    {
+        WriteUInt32(buffer, offset, (uint)value);
+    }
+}

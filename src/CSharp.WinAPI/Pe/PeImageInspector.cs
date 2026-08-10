@@ -11,6 +11,10 @@ public sealed class PeImageInspector
     private const int CoffHeaderLength = 20;
     private const int SectionHeaderLength = 40;
     private const int MaximumSectionCount = 96;
+    private const int ImportDescriptorLength = 20;
+    private const int MaximumImportDescriptorCount = 4_096;
+    private const int MaximumImportsPerModule = 16_384;
+    private const int MaximumImportStringLength = 1_024;
 
     /// <summary>Inspects a PE file from disk without loading, executing, or modifying it.</summary>
     /// <exception cref="PeImageInspectionException">Thrown when the path cannot be read or the file is malformed.</exception>
@@ -139,7 +143,7 @@ public sealed class PeImageInspector
         var directories = ParseDirectories(image, filePath, optionalOffset + directoryOffset, Math.Min(numberOfDirectories, 16U));
         var sections = ParseSections(image, filePath, sectionOffset, sectionCount);
 
-        return new PeImageInfo(
+        var parsedImage = new PeImageInfo(
             filePath,
             peOffset,
             machine,
@@ -171,6 +175,171 @@ public sealed class PeImageInspector
             numberOfDirectories,
             sections,
             directories);
+
+        parsedImage.SetImports(ParseImports(parsedImage, image));
+        return parsedImage;
+    }
+
+    private static IReadOnlyList<PeImportModuleInfo> ParseImports(PeImageInfo parsedImage, byte[] image)
+    {
+        var importDirectory = parsedImage.DataDirectories.FirstOrDefault(directory => directory.Kind == PeDataDirectoryKind.ImportTable);
+
+        if (importDirectory is null || (importDirectory.Address == 0 && importDirectory.Size == 0))
+        {
+            return Array.Empty<PeImportModuleInfo>();
+        }
+
+        if (importDirectory.Address == 0 || importDirectory.Size < ImportDescriptorLength)
+        {
+            throw new PeImageInspectionException(parsedImage.FilePath, "Import directory", "The import directory has an invalid RVA or size.");
+        }
+
+        var descriptorCapacity = importDirectory.Size / ImportDescriptorLength;
+
+        if (descriptorCapacity > MaximumImportDescriptorCount)
+        {
+            throw new PeImageInspectionException(parsedImage.FilePath, "Import directory", "The import directory declares too many descriptors.");
+        }
+
+        var imports = new List<PeImportModuleInfo>((int)descriptorCapacity);
+
+        for (var descriptorIndex = 0U; descriptorIndex < descriptorCapacity; descriptorIndex++)
+        {
+            var descriptorRva = AddRva(importDirectory.Address, (ulong)descriptorIndex * ImportDescriptorLength, parsedImage.FilePath, "Import directory");
+            var descriptorOffset = MapRva(parsedImage, descriptorRva, "Import directory");
+            var originalFirstThunk = ReadUInt32(image, descriptorOffset, parsedImage.FilePath, "Import directory");
+            var timeDateStamp = ReadUInt32(image, checked(descriptorOffset + 4U), parsedImage.FilePath, "Import directory");
+            var forwarderChain = ReadUInt32(image, checked(descriptorOffset + 8U), parsedImage.FilePath, "Import directory");
+            var nameRva = ReadUInt32(image, checked(descriptorOffset + 12U), parsedImage.FilePath, "Import directory");
+            var firstThunk = ReadUInt32(image, checked(descriptorOffset + 16U), parsedImage.FilePath, "Import directory");
+
+            if (originalFirstThunk == 0 && timeDateStamp == 0 && forwarderChain == 0 && nameRva == 0 && firstThunk == 0)
+            {
+                return imports;
+            }
+
+            if (nameRva == 0 || firstThunk == 0)
+            {
+                throw new PeImageInspectionException(parsedImage.FilePath, "Import directory", "An import descriptor is missing its DLL name or IAT RVA.");
+            }
+
+            var lookupTableRva = originalFirstThunk == 0 ? firstThunk : originalFirstThunk;
+            var name = ReadNullTerminatedAscii(parsedImage, image, nameRva, "Import DLL name");
+            var functions = ParseImportFunctions(parsedImage, image, lookupTableRva, firstThunk);
+            imports.Add(new PeImportModuleInfo(name, originalFirstThunk, firstThunk, timeDateStamp, forwarderChain, functions));
+        }
+
+        throw new PeImageInspectionException(parsedImage.FilePath, "Import directory", "The import descriptor table has no null terminator within its declared bounds.");
+    }
+
+    private static IReadOnlyList<PeImportFunctionInfo> ParseImportFunctions(PeImageInfo parsedImage, byte[] image, uint lookupTableRva, uint firstThunk)
+    {
+        var thunkWidth = parsedImage.Format == PeImageFormat.Pe32 ? 4U : 8U;
+        var functions = new List<PeImportFunctionInfo>();
+
+        for (var functionIndex = 0U; functionIndex < MaximumImportsPerModule; functionIndex++)
+        {
+            var relativeOffset = (ulong)functionIndex * thunkWidth;
+            var lookupRva = AddRva(lookupTableRva, relativeOffset, parsedImage.FilePath, "Import lookup table");
+            var lookupOffset = MapRva(parsedImage, lookupRva, "Import lookup table");
+            var thunkValue = thunkWidth == 4
+                ? ReadUInt32(image, lookupOffset, parsedImage.FilePath, "Import lookup table")
+                : ReadUInt64(image, lookupOffset, parsedImage.FilePath, "Import lookup table");
+
+            if (thunkValue == 0)
+            {
+                return functions;
+            }
+
+            var iatRva = AddRva(firstThunk, relativeOffset, parsedImage.FilePath, "Import address table");
+            _ = MapRva(parsedImage, iatRva, "Import address table");
+
+            if (IsOrdinalImport(thunkValue, parsedImage.Format))
+            {
+                ValidateOrdinalImport(thunkValue, parsedImage.Format, parsedImage.FilePath);
+                functions.Add(new PeImportFunctionInfo(null, (ushort)thunkValue, true, null, lookupRva, iatRva));
+                continue;
+            }
+
+            var hintNameRva = GetHintNameRva(thunkValue, parsedImage.Format, parsedImage.FilePath);
+            var hintOffset = MapRva(parsedImage, hintNameRva, "Import hint/name");
+            var hint = ReadUInt16(image, hintOffset, parsedImage.FilePath, "Import hint/name");
+            var functionName = ReadNullTerminatedAscii(parsedImage, image, AddRva(hintNameRva, sizeof(ushort), parsedImage.FilePath, "Import hint/name"), "Import hint/name");
+            functions.Add(new PeImportFunctionInfo(functionName, null, false, hint, lookupRva, iatRva));
+        }
+
+        throw new PeImageInspectionException(parsedImage.FilePath, "Import lookup table", "The thunk table has no null terminator within the configured safety limit.");
+    }
+
+    private static bool IsOrdinalImport(ulong thunkValue, PeImageFormat format) => format == PeImageFormat.Pe32
+        ? (thunkValue & 0x80000000UL) != 0
+        : (thunkValue & 0x8000000000000000UL) != 0;
+
+    private static void ValidateOrdinalImport(ulong thunkValue, PeImageFormat format, string filePath)
+    {
+        var nonOrdinalBits = format == PeImageFormat.Pe32 ? thunkValue & 0x7FFF0000UL : thunkValue & 0x7FFFFFFFFFFF0000UL;
+
+        if (nonOrdinalBits != 0)
+        {
+            throw new PeImageInspectionException(filePath, "Import lookup table", "An ordinal import has reserved bits set.");
+        }
+    }
+
+    private static uint GetHintNameRva(ulong thunkValue, PeImageFormat format, string filePath)
+    {
+        var hintNameRva = format == PeImageFormat.Pe32 ? thunkValue & 0x7FFFFFFFUL : thunkValue & 0x7FFFFFFFFFFFFFFFUL;
+
+        if (hintNameRva == 0 || hintNameRva > uint.MaxValue)
+        {
+            throw new PeImageInspectionException(filePath, "Import lookup table", "A name import has an invalid hint/name RVA.");
+        }
+
+        return (uint)hintNameRva;
+    }
+
+    private static string ReadNullTerminatedAscii(PeImageInfo parsedImage, byte[] image, uint startRva, string stage)
+    {
+        var bytes = new List<byte>();
+
+        for (var index = 0U; index < MaximumImportStringLength; index++)
+        {
+            var rva = AddRva(startRva, index, parsedImage.FilePath, stage);
+            var offset = MapRva(parsedImage, rva, stage);
+            var value = image[(int)offset];
+
+            if (value == 0)
+            {
+                return Encoding.ASCII.GetString(bytes.ToArray());
+            }
+
+            bytes.Add(value);
+        }
+
+        throw new PeImageInspectionException(parsedImage.FilePath, stage, $"The ASCII string exceeds {MaximumImportStringLength} bytes or has no null terminator.");
+    }
+
+    private static uint MapRva(PeImageInfo parsedImage, uint rva, string stage)
+    {
+        try
+        {
+            return parsedImage.GetFileOffsetForRva(rva);
+        }
+        catch (PeImageInspectionException exception)
+        {
+            throw new PeImageInspectionException(parsedImage.FilePath, stage, exception.Reason, exception);
+        }
+    }
+
+    private static uint AddRva(uint baseRva, ulong relativeOffset, string filePath, string stage)
+    {
+        var result = (ulong)baseRva + relativeOffset;
+
+        if (result > uint.MaxValue)
+        {
+            throw new PeImageInspectionException(filePath, stage, "An RVA calculation overflowed the 32-bit address space.");
+        }
+
+        return (uint)result;
     }
 
     private static IReadOnlyList<PeDataDirectoryInfo> ParseDirectories(byte[] image, string filePath, uint offset, uint count)

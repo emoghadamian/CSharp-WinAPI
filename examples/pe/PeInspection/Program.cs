@@ -32,6 +32,37 @@ try
     {
         Console.WriteLine($"{directory.Kind,-22} 0x{directory.Address:X8} size 0x{directory.Size:X8}{(directory.AddressIsFileOffset ? " (file offset)" : string.Empty)}");
     }
+
+    Console.WriteLine();
+    Console.WriteLine($"Normal imported DLLs: {image.Imports.Count}");
+
+    foreach (var module in image.Imports.Take(20))
+    {
+        Console.WriteLine($"  {module.Name} ({module.Functions.Count} imports)");
+
+        foreach (var function in module.Functions.Take(40))
+        {
+            var displayName = function.IsOrdinal ? $"ordinal #{function.Ordinal}" : function.Name;
+            Console.WriteLine($"    {displayName}");
+        }
+
+        if (module.Functions.Count > 40)
+        {
+            Console.WriteLine($"    ... {module.Functions.Count - 40} additional imports not displayed.");
+        }
+    }
+
+    if (image.Imports.Count > 20)
+    {
+        Console.WriteLine($"  ... {image.Imports.Count - 20} additional DLLs not displayed.");
+    }
+
+    if (image.HasDelayImports)
+    {
+        Console.WriteLine("Delay-import directory present; delay-load contents are not parsed by this example.");
+    }
+
+    Console.WriteLine("Imports are static PE metadata and do not prove these APIs were executed.");
 }
 catch (PeImageInspectionException exception)
 {
