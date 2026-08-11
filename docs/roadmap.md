@@ -16,6 +16,7 @@
 - PE image headers, sections, data directories, and RVA-to-file-offset mapping
 - PE Certificate Table file-offset inspection, WIN_CERTIFICATE parsing, PKCS#7/CMS metadata, and public X.509 metadata
 - access-token inspection: user, groups, privileges, elevation, integrity, session, type, and impersonation level — COMPLETE
+- File Security Descriptor / ACL inspection — COMPLETE
 - service and registry inspection
 
 ## Advanced

@@ -5,6 +5,7 @@ using CSharp.WinAPI.Pe;
 using CSharp.WinAPI.Processes;
 using CSharp.WinAPI.Threads;
 using CSharp.WinAPI.Tokens;
+using CSharp.WinAPI.Security;
 
 var FixedCms = Convert.FromBase64String("MIIExwYJKoZIhvcNAQcCoIIEuDCCBLQCAQExDTALBglghkgBZQMEAgEwEgYJKoZIhvcNAQcBoAUEAwECA6CCAw4wggMKMIIB8qADAgECAggdZs60nr5UFTANBgkqhkiG9w0BAQsFADBFMQswCQYDVQQGEwJVUzEWMBQGA1UEChMNQmx1ZVRlYW0gTGFiczEeMBwGA1UEAxMVQ1NoYXJwLVdpbkFQSSBGaXh0dXJlMB4XDTI0MDEwMTAwMDAwMFoXDTMwMDEwMTAwMDAwMFowRTELMAkGA1UEBhMCVVMxFjAUBgNVBAoTDUJsdWVUZWFtIExhYnMxHjAcBgNVBAMTFUNTaGFycC1XaW5BUEkgRml4dHVyZTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAOn7dkQvMA146Z5D97EEquUMv93h0bRqGSApRY34kRS7wC2K2vjIZ3rqKUnU8Z1l7g2uO+97HQvwIrMG8dSCfpVeIcgV108U03FQsx+qxSXbm9NaVDVa4tMf1ez96wbCC2sJyV0tzAurYKRTefBY4D/BgVJiUKpXYYxQmr3CZ+4mYUitBZOeAdPCtnEG8b/OP9XEfmlfHoi4nhMIfe82OyTtFHmERxxFcb/PmlaEgpwtxf4nw0UP2st/k1aIcQ7gQF0eBQIEt+X0qMvv4jWrOYs979cwGq90nqwva9DwrseCJxc019eTKeVaGkmqm+xdAdeTazAUa5kL1JDRuGphrp0CAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAMu/QKioJWUCEolVX6j/GqYx3P7o6tZ/HyixjVNN6qwkDZTg4Mlz9T9d6usTFFbCXLujMBJI4EFWvN4MoeJsYaSuhf8N1Ok+TkoypWrNn+TKLlkLAjIjUTX01PKWYfqB1F6f0f9KmjCykrhgNQUwcYyCnP38R0H26cGzNyRK5ph7XutM4fXpLGbOw8hjQ5nUdlFhChS+A7cw0KoV8ez5sjdRIvUBZNp6nxBvNJurreHaYlAvV/0Q78/x+FuT76Xv7Y6sdJZYxBcgGuMOxx9LVITRVQmcdDVz2+03UBM4dPLpad25qIQLs0NBOl2Du1vuo6+ECEml2abg5rvkdm9FmXzGCAXgwggF0AgEBMFEwRTELMAkGA1UEBhMCVVMxFjAUBgNVBAoTDUJsdWVUZWFtIExhYnMxHjAcBgNVBAMTFUNTaGFycC1XaW5BUEkgRml4dHVyZQIIHWbOtJ6+VBUwCwYJYIZIAWUDBAIBMAsGCSqGSIb3DQEBAQSCAQB2rWkuriJPPD/L+KNmdT5tRbMH8UcLMkxFZWfyadR2qK6BtQauZ/pBBj3VTuLyC1/RJGM6q5m7S1T6a6TOU06pzE7qHyu1NiaAyeOX8hJUdHR/L1UK/i9sKTb6f84o4mppe3CoLQSO1FGMJdHoqYGbSX+psX/8npyPdYfJZZQEkTlI7S32kNSBl878vV3OQO8TlEMolxTLN1KpZR00Qn6EDpuqhPckyS3Rcnw1FWao2C3Q0OUOzXgxU/H+dBKZJRfoBx0+fE8SsBb/FrW8/1PBiQr6W1R4jnMaYFvHnsEbL+1cdkpTK+TZNFaUiLd9r2HFGi6Mzi0lWimlcU+4VEC2");
 
@@ -136,6 +137,36 @@ Run("token models retain unknown native enum values", () =>
     var level = new TokenImpersonationLevelInfo(uint.MaxValue, TokenImpersonationLevel.Unknown);
     Assert(type.RawValue == uint.MaxValue && type.Value == TokenType.Unknown, "An unknown token type lost its raw value.");
     Assert(level.RawValue == uint.MaxValue && level.Value == TokenImpersonationLevel.Unknown, "An unknown impersonation level lost its raw value.");
+});
+
+var fileSecurityInspector = new FileSecurityInspector();
+
+Run("file and directory security descriptors expose immutable DACL metadata", () =>
+{
+    var file = fileSecurityInspector.Inspect(Path.GetTempFileName());
+    var directory = fileSecurityInspector.Inspect(Path.GetTempPath());
+    Assert(!string.IsNullOrWhiteSpace(file.Owner?.Sid), "The file owner SID was empty.");
+    Assert(!string.IsNullOrWhiteSpace(directory.Owner?.Sid), "The directory owner SID was empty.");
+    Assert(file.Dacl.IsPresent || !file.Dacl.IsNull, "The file DACL state was not represented.");
+    if (file.Dacl.Entries.Count > 0)
+    {
+        Assert(file.Dacl.Entries[0].RawType <= byte.MaxValue, "The ACE type was not preserved.");
+        AssertCollectionSnapshot(file.Dacl.Entries, "file DACL entries");
+    }
+});
+
+Run("invalid file-security paths preserve contextual native errors", () =>
+{
+    var path = Path.Combine(Path.GetTempPath(), $"CSharp-WinAPI-Missing-{Guid.NewGuid():N}");
+    try { _ = fileSecurityInspector.Inspect(path); throw new InvalidOperationException("A missing path unexpectedly had a descriptor."); }
+    catch (FileSecurityInspectionException exception) { Assert(exception.Path == Path.GetFullPath(path) && exception.NativeErrorCode != 0, "The file-security error was not contextual."); }
+});
+
+Run("file-security inspection can be repeated without retaining descriptor buffers", () =>
+{
+    var path = Path.GetTempFileName();
+    for (var iteration = 0; iteration < 100; iteration++) { Assert(fileSecurityInspector.Inspect(path).Owner is not null, "Repeated file-security inspection lost the owner."); }
+    File.Delete(path);
 });
 
 var threadInspector = new ThreadInspector();

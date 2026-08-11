@@ -97,6 +97,8 @@ See [Access-token inspection](docs/tokens.md).
 
 Implemented: read-only local-group/member enumeration and access-token inspection.
 
+File Security Descriptor / ACL Inspection is also implemented for files and directories, including owner/group SIDs, DACL state, ACEs, access masks, inheritance, and control flags. See [file-security.md](docs/file-security.md).
+
 Planned: users, services, registry, and window inspection.
 
 ## 🛡️ Blue Team Use Cases

@@ -90,4 +90,7 @@ internal static partial class Kernel32Native
     [LibraryImport("kernel32.dll", EntryPoint = "CloseHandle")]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool CloseHandle(IntPtr handle);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "LocalFree")]
+    internal static partial nint LocalFree(nint memory);
 }
