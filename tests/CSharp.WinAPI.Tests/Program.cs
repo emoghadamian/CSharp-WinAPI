@@ -627,6 +627,26 @@ Run("PE certificate table rejects invalid alignment and malformed later entries"
     AssertPeFailure(() => peInspector.Inspect(path), "Certificate table");
 }));
 
+Run("PE certificate table bounds its entry count", () => WithPeFixture(pe32Plus: false, path =>
+{
+    const int entryCount = 4_097;
+    var bytes = BuildPeFixture(pe32Plus: false);
+    Array.Resize(ref bytes, 0x600 + (entryCount * 8));
+    WriteUInt32(bytes, 0x118, 0x600);
+    WriteUInt32(bytes, 0x11C, entryCount * 8);
+
+    for (var index = 0; index < entryCount; index++)
+    {
+        var offset = 0x600 + (index * 8);
+        WriteUInt32(bytes, offset, 8);
+        WriteUInt16(bytes, offset + 4, 0x0200);
+        WriteUInt16(bytes, offset + 6, 0x9999);
+    }
+
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Certificate table");
+}));
+
 Run("PE certificate table reports malformed PKCS7 context", () => WithCertificateFixture(new byte[] { 1, 2, 3 }, path =>
 {
     AssertPeFailure(() => peInspector.Inspect(path), "PKCS#7");

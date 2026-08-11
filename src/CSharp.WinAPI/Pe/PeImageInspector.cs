@@ -20,6 +20,7 @@ public sealed class PeImageInspector
     private const int MaximumImportStringLength = 1_024;
     private const int ExportDirectoryLength = 40;
     private const int MaximumExportFunctionCount = 65_536;
+    private const int MaximumCertificateEntryCount = 4_096;
 
     /// <summary>Inspects a PE file from disk without loading, executing, or modifying it.</summary>
     /// <exception cref="PeImageInspectionException">Thrown when the path cannot be read or the file is malformed.</exception>
@@ -208,6 +209,11 @@ public sealed class PeImageInspector
 
         while (cursor < tableEnd)
         {
+            if (entries.Count >= MaximumCertificateEntryCount)
+            {
+                throw new PeImageInspectionException(parsedImage.FilePath, "Certificate table", $"The certificate table exceeds the supported limit of {MaximumCertificateEntryCount:N0} entries.");
+            }
+
             if (tableEnd - cursor < 8)
             {
                 throw new PeImageInspectionException(parsedImage.FilePath, "Certificate table", "A WIN_CERTIFICATE header is truncated.");
