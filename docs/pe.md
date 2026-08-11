@@ -41,6 +41,8 @@ file offset -- section raw-data mapping --> RVA -- ImageBase + RVA --> VA
 
 `PeSectionInfo` exposes the full requested section-header metadata and decodes code, initialized/uninitialized data, read, write, and execute characteristics. Writable-and-executable section flags can be worth investigation, but they are not proof of maliciousness.
 
+For deterministic on-disk RVA mapping, the parser rejects a section raw RVA range that overlaps the header RVA mapping or another section raw RVA range. Boundary-touching ranges and overlap confined to virtual-only space remain valid because they do not make a raw RVA resolve to two file offsets.
+
 The data-directory table is represented by `PeDataDirectoryInfo`. Standard Export, Import, Resource, Exception, Certificate, Base Relocation, Debug, TLS, Load Config, and IAT slots are named. Directory contents are intentionally not parsed in this foundational phase. All directory addresses are RVAs except the Certificate Table directory, whose address is a file offset.
 
 Import/export directories support future dependency and symbol investigations. Relocations support rebasing/ASLR, TLS can describe thread-local initialization, and Load Config contains loader/security metadata. Certificate data is not a normal mapped-image RVA and requires separate signature validation work.

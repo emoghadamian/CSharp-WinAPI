@@ -71,8 +71,8 @@ public sealed class PeImageInfo
         SizeOfHeapReserve = sizeOfHeapReserve;
         SizeOfHeapCommit = sizeOfHeapCommit;
         NumberOfRvaAndSizes = numberOfRvaAndSizes;
-        this.sections = sections;
-        this.dataDirectories = dataDirectories;
+        this.sections = PeCollectionSnapshot.Create(sections);
+        this.dataDirectories = PeCollectionSnapshot.Create(dataDirectories);
     }
 
     /// <summary>Gets the inspected file path.</summary>
@@ -148,7 +148,7 @@ public sealed class PeImageInfo
     /// <summary>Gets Certificate Table metadata, or null when the image has no certificate table.</summary>
     public PeCertificateTableInfo? CertificateTable => certificateTable;
 
-    internal void SetImports(IReadOnlyList<PeImportModuleInfo> parsedImports) => imports = parsedImports;
+    internal void SetImports(IReadOnlyList<PeImportModuleInfo> parsedImports) => imports = PeCollectionSnapshot.Create(parsedImports);
     internal void SetExports(PeExportInfo? parsedExports) => exports = parsedExports;
     internal void SetCertificateTable(PeCertificateTableInfo? parsedCertificateTable) => certificateTable = parsedCertificateTable;
 

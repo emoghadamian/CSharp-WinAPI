@@ -7,4 +7,8 @@ public sealed record PeImportModuleInfo(
     uint FirstThunk,
     uint TimeDateStamp,
     uint ForwarderChain,
-    IReadOnlyList<PeImportFunctionInfo> Functions);
+    IReadOnlyList<PeImportFunctionInfo> Functions)
+{
+    /// <summary>Gets an immutable snapshot of the module's imported functions.</summary>
+    public IReadOnlyList<PeImportFunctionInfo> Functions { get; } = PeCollectionSnapshot.Create(Functions);
+}

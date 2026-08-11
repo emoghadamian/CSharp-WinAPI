@@ -331,6 +331,59 @@ Run("PE parser exposes data directories", () => WithPeFixture(pe32Plus: false, p
     Assert(directories[4].AddressIsFileOffset, "The certificate directory was not marked as a file offset.");
 }));
 
+Run("PE public collections are immutable snapshots", () =>
+{
+    WithPeFixture(pe32Plus: false, path =>
+    {
+        var image = peInspector.Inspect(path);
+        AssertCollectionSnapshot(image.Sections, "section headers");
+        AssertCollectionSnapshot(image.DataDirectories, "data directories");
+        AssertCollectionSnapshot(image.Exports!.Functions, "export functions");
+    }, includeImports: true);
+    WithPeFixture(pe32Plus: false, path =>
+    {
+        var module = peInspector.Inspect(path).Imports.First();
+        AssertCollectionSnapshot(peInspector.Inspect(path).Imports, "import modules");
+        AssertCollectionSnapshot(module.Functions, "import functions");
+    }, includeImports: true);
+    WithCertificateFixture(FixedCms, path =>
+    {
+        var table = peInspector.Inspect(path).CertificateTable!;
+        AssertCollectionSnapshot(table.Entries, "certificate entries");
+        AssertCollectionSnapshot(table.Entries[0].Certificates!, "CMS certificates");
+    });
+});
+
+Run("PE parser permits boundary-touching raw RVA ranges", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var bytes = File.ReadAllBytes(path);
+    AddSectionHeader(bytes, pe32Plus: false, name: ".data", virtualAddress: 0x1400, virtualSize: 0x200, sizeOfRawData: 0x200, pointerToRawData: 0x400);
+    File.WriteAllBytes(path, bytes);
+    var image = peInspector.Inspect(path);
+    Assert(image.Sections.Count == 2, "The boundary-touching section was not retained.");
+    Assert(image.GetFileOffsetForRva(0x1410) == 0x410, "The boundary-touching section did not map deterministically.");
+}));
+
+Run("PE parser rejects overlapping raw RVA section ranges", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var bytes = File.ReadAllBytes(path);
+    AddSectionHeader(bytes, pe32Plus: false, name: ".over", virtualAddress: 0x1300, virtualSize: 0x200, sizeOfRawData: 0x200, pointerToRawData: 0x400);
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Section table");
+}));
+
+Run("PE parser rejects malformed section RVA ranges", () => WithPeFixture(pe32Plus: false, path =>
+{
+    var bytes = File.ReadAllBytes(path);
+    WriteUInt32(bytes, 0x184, 0x100);
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Section table");
+    bytes = BuildPeFixture(pe32Plus: false);
+    WriteUInt32(bytes, 0x184, uint.MaxValue);
+    File.WriteAllBytes(path, bytes);
+    AssertPeFailure(() => peInspector.Inspect(path), "Section table");
+}));
+
 Run("PE RVA mapping handles headers sections and invalid RVAs", () => WithPeFixture(pe32Plus: false, path =>
 {
     var image = peInspector.Inspect(path);
@@ -694,6 +747,21 @@ static void Assert(bool condition, string message)
     }
 }
 
+static void AssertCollectionSnapshot<T>(IReadOnlyList<T> values, string description)
+{
+    Assert(values is not T[], $"The {description} collection exposed its backing array.");
+    Assert(values is IList<T> list && list.IsReadOnly, $"The {description} collection was not read-only.");
+
+    try
+    {
+        ((IList<T>)values)[0] = values[0];
+        throw new InvalidOperationException($"The {description} collection accepted a mutation.");
+    }
+    catch (NotSupportedException)
+    {
+    }
+}
+
 static void WithPeFixture(bool pe32Plus, Action<string> test, bool includeImports = false)
 {
     var path = Path.Combine(Path.GetTempPath(), $"CSharp-WinAPI-PeFixture-{Guid.NewGuid():N}.bin");
@@ -846,6 +914,21 @@ static byte[] BuildPeFixture(bool pe32Plus, bool includeImports = false)
     AddExportFixtureData(image);
 
     return image;
+}
+
+static void AddSectionHeader(byte[] image, bool pe32Plus, string name, uint virtualAddress, uint virtualSize, uint sizeOfRawData, uint pointerToRawData)
+{
+    var coffOffset = 0x84;
+    var optionalOffset = 0x98;
+    var sectionOffset = optionalOffset + (pe32Plus ? 0xF0 : 0xE0);
+    var additionalSectionOffset = sectionOffset + 40;
+    WriteUInt16(image, coffOffset + 2, 2);
+    System.Text.Encoding.ASCII.GetBytes(name).AsSpan(0, Math.Min(name.Length, 8)).CopyTo(image.AsSpan(additionalSectionOffset, 8));
+    WriteUInt32(image, additionalSectionOffset + 8, virtualSize);
+    WriteUInt32(image, additionalSectionOffset + 12, virtualAddress);
+    WriteUInt32(image, additionalSectionOffset + 16, sizeOfRawData);
+    WriteUInt32(image, additionalSectionOffset + 20, pointerToRawData);
+    WriteUInt32(image, additionalSectionOffset + 36, 0xC0000040);
 }
 
 static void AddExportFixtureData(byte[] image)

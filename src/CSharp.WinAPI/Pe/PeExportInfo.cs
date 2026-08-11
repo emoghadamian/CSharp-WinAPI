@@ -13,4 +13,8 @@ public sealed record PeExportInfo(
     uint AddressOfFunctions,
     uint AddressOfNames,
     uint AddressOfNameOrdinals,
-    IReadOnlyList<PeExportFunctionInfo> Functions);
+    IReadOnlyList<PeExportFunctionInfo> Functions)
+{
+    /// <summary>Gets an immutable snapshot of export-address-table entries.</summary>
+    public IReadOnlyList<PeExportFunctionInfo> Functions { get; } = PeCollectionSnapshot.Create(Functions);
+}

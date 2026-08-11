@@ -183,6 +183,8 @@ The module targets Windows and uses Unicode Netapi32 APIs available since Window
 | PE images | PE32/PE32+ headers, sections, data directories, RVA mapping | Yes | Yes | Yes |
 | PE images | Import Directory, ILT/IAT, name and ordinal imports | Yes | Yes | Yes |
 | PE images | Export Directory, named/ordinal exports, forwarders | Yes | Yes | Yes |
+| PE images | Certificate Table and aligned `WIN_CERTIFICATE` entries | Yes | Yes | Yes |
+| PE images | PKCS#7 / CMS and public X.509 metadata | Yes | Yes | Yes |
 
 ## 🤝 Contributing
 

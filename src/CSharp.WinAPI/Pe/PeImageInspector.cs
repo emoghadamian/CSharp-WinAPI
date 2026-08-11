@@ -147,7 +147,7 @@ public sealed class PeImageInspector
         }
 
         var directories = ParseDirectories(image, filePath, optionalOffset + directoryOffset, Math.Min(numberOfDirectories, 16U));
-        var sections = ParseSections(image, filePath, sectionOffset, sectionCount);
+        var sections = ParseSections(image, filePath, sectionOffset, sectionCount, sizeOfHeaders);
 
         var parsedImage = new PeImageInfo(
             filePath,
@@ -543,7 +543,7 @@ public sealed class PeImageInspector
         return directories;
     }
 
-    private static IReadOnlyList<PeSectionInfo> ParseSections(byte[] image, string filePath, uint offset, ushort count)
+    private static IReadOnlyList<PeSectionInfo> ParseSections(byte[] image, string filePath, uint offset, ushort count, uint sizeOfHeaders)
     {
         var sections = new List<PeSectionInfo>(count);
 
@@ -561,7 +561,7 @@ public sealed class PeImageInspector
                 throw new PeImageInspectionException(filePath, "Section table", "A section virtual range overflows the 32-bit RVA space.");
             }
 
-            sections.Add(new PeSectionInfo(
+            var section = new PeSectionInfo(
                 ReadSectionName(image.AsSpan((int)sectionOffset, 8)),
                 ReadUInt32(image, sectionOffset + 8U, filePath, "Section table"),
                 virtualAddress,
@@ -571,10 +571,44 @@ public sealed class PeImageInspector
                 ReadUInt32(image, sectionOffset + 28U, filePath, "Section table"),
                 ReadUInt16(image, sectionOffset + 32U, filePath, "Section table"),
                 ReadUInt16(image, sectionOffset + 34U, filePath, "Section table"),
-                (PeSectionCharacteristics)ReadUInt32(image, sectionOffset + 36U, filePath, "Section table")));
+                (PeSectionCharacteristics)ReadUInt32(image, sectionOffset + 36U, filePath, "Section table"));
+            ValidateUnambiguousRawRvaMapping(sections, section, sizeOfHeaders, filePath);
+            sections.Add(section);
         }
 
         return sections;
+    }
+
+    private static void ValidateUnambiguousRawRvaMapping(IReadOnlyList<PeSectionInfo> sections, PeSectionInfo candidate, uint sizeOfHeaders, string filePath)
+    {
+        if (candidate.SizeOfRawData == 0)
+        {
+            return;
+        }
+
+        var candidateStart = (ulong)candidate.VirtualAddress;
+        var candidateEnd = candidateStart + candidate.SizeOfRawData;
+
+        if (candidateStart < sizeOfHeaders)
+        {
+            throw new PeImageInspectionException(filePath, "Section table", "A section raw RVA range overlaps the header RVA mapping.");
+        }
+
+        foreach (var section in sections)
+        {
+            if (section.SizeOfRawData == 0)
+            {
+                continue;
+            }
+
+            var sectionStart = (ulong)section.VirtualAddress;
+            var sectionEnd = sectionStart + section.SizeOfRawData;
+
+            if (candidateStart < sectionEnd && sectionStart < candidateEnd)
+            {
+                throw new PeImageInspectionException(filePath, "Section table", "Section raw RVA ranges overlap and would make RVA-to-file-offset mapping ambiguous.");
+            }
+        }
     }
 
     private static ulong ReadSizedValue(byte[] image, string filePath, uint offset, PeImageFormat format) => format == PeImageFormat.Pe32
