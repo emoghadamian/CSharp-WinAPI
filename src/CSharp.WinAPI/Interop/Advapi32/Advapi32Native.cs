@@ -21,17 +21,33 @@ internal static partial class Advapi32Native
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool GetSecurityDescriptorOwner(SafeSecurityDescriptorHandle securityDescriptor, out nint owner, [MarshalAs(UnmanagedType.Bool)] out bool defaulted);
 
+    [LibraryImport("advapi32.dll", EntryPoint = "GetSecurityDescriptorOwner", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool GetSecurityDescriptorOwner(nint securityDescriptor, out nint owner, [MarshalAs(UnmanagedType.Bool)] out bool defaulted);
+
     [LibraryImport("advapi32.dll", EntryPoint = "GetSecurityDescriptorGroup", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool GetSecurityDescriptorGroup(SafeSecurityDescriptorHandle securityDescriptor, out nint group, [MarshalAs(UnmanagedType.Bool)] out bool defaulted);
+
+    [LibraryImport("advapi32.dll", EntryPoint = "GetSecurityDescriptorGroup", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool GetSecurityDescriptorGroup(nint securityDescriptor, out nint group, [MarshalAs(UnmanagedType.Bool)] out bool defaulted);
 
     [LibraryImport("advapi32.dll", EntryPoint = "GetSecurityDescriptorDacl", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool GetSecurityDescriptorDacl(SafeSecurityDescriptorHandle securityDescriptor, [MarshalAs(UnmanagedType.Bool)] out bool present, out nint dacl, [MarshalAs(UnmanagedType.Bool)] out bool defaulted);
 
+    [LibraryImport("advapi32.dll", EntryPoint = "GetSecurityDescriptorDacl", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool GetSecurityDescriptorDacl(nint securityDescriptor, [MarshalAs(UnmanagedType.Bool)] out bool present, out nint dacl, [MarshalAs(UnmanagedType.Bool)] out bool defaulted);
+
     [LibraryImport("advapi32.dll", EntryPoint = "GetSecurityDescriptorControl", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool GetSecurityDescriptorControl(SafeSecurityDescriptorHandle securityDescriptor, out ushort control, out uint revision);
+
+    [LibraryImport("advapi32.dll", EntryPoint = "GetSecurityDescriptorControl", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool GetSecurityDescriptorControl(nint securityDescriptor, out ushort control, out uint revision);
 
     [LibraryImport("advapi32.dll", EntryPoint = "GetAclInformation", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

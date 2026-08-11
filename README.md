@@ -101,7 +101,11 @@ File Security Descriptor / ACL Inspection is also implemented for files and dire
 
 AccessCheck / Effective Access Evaluation is implemented for the current process token against files and directories. It preserves desired, mapped, and granted masks; an authorization denial is a normal result. See [access-check.md](docs/access-check.md).
 
-Planned: users, services, registry, and window inspection.
+Registry Security Descriptor / ACL Inspection is implemented for local registry subkeys, including owner/group SIDs, DACL state, ACE metadata, explicit registry views, and preserved `LSTATUS` failures. See [registry-security.md](docs/registry-security.md).
+
+Registry AccessCheck / Effective Access Evaluation is implemented for the current process token and registry-specific generic mappings. See [registry-access-check.md](docs/registry-access-check.md).
+
+Planned: users, services, and window inspection.
 
 ## 🛡️ Blue Team Use Cases
 
@@ -124,6 +128,7 @@ src/CSharp.WinAPI/                 reusable library
   Memory/                          managed read-only virtual-memory metadata abstraction
   Pe/                              managed read-only executable-image parsing
   Tokens/                          managed read-only access-token abstraction
+  Registry/                        managed read-only registry security and effective-access abstractions
 examples/learning/                 minimal interop demonstrations
 examples/security/                 defensive investigation examples
 examples/processes/                process inspection examples
@@ -132,6 +137,7 @@ examples/modules/                  module and DLL inspection examples
 examples/memory/                   virtual-memory inspection examples
 examples/pe/                       executable-image inspection examples
 examples/tokens/                   access-token inspection examples
+examples/registry/                 registry security inspection examples
 tests/CSharp.WinAPI.Tests/         dependency-free executable integration tests
 docs/                              interop guidance, security notes, and roadmap
 ```
@@ -164,7 +170,8 @@ dotnet run --project tests/CSharp.WinAPI.Tests --configuration Debug
 6. `examples/modules/ModuleEnumeration` — module snapshots, addresses, and cross-architecture limits.
 7. `examples/memory/VirtualMemoryInspection` — virtual-memory region metadata and safe traversal.
 8. `examples/pe/PeInspection` — PE headers, sections, directories, and RVA mapping.
-9. See the [full roadmap](docs/roadmap.md).
+9. `examples/registry/RegistrySecurityInspection` — `READ_CONTROL`, caller-owned descriptors, DACLs, ACEs, and registry views.
+10. See the [full roadmap](docs/roadmap.md).
 
 ## ⚠️ Privileges & Windows Version Considerations
 
@@ -199,6 +206,9 @@ The module targets Windows and uses Unicode Netapi32 APIs available since Window
 | PE images | PKCS#7 / CMS and public X.509 metadata | Yes | Yes | Yes |
 | Access tokens | `OpenProcessToken`, `GetTokenInformation`, and `CloseHandle` | Yes | Yes | Yes |
 | Access tokens | User, groups, privileges, elevation, integrity, session, type, and impersonation-level reporting | Yes | Yes | Yes |
+| Registry security | `RegOpenKeyExW`, `RegGetKeySecurity`, `RegCloseKey`, and SafeHandle-owned opened keys | Yes | Yes | Yes |
+| Registry security | Owner/group SIDs, DACL state, ACEs, control flags, and registry views | Yes | Yes | Yes |
+| Registry effective access | `AccessCheck` with current-token bridge and registry `GENERIC_MAPPING` | Yes | Yes | Yes |
 
 ## 🤝 Contributing
 

@@ -18,7 +18,9 @@
 - access-token inspection: user, groups, privileges, elevation, integrity, session, type, and impersonation level — COMPLETE
 - File Security Descriptor / ACL inspection — COMPLETE
 - AccessCheck / Effective Access Evaluation — COMPLETE
-- service and registry inspection
+- Registry Security Descriptor / ACL inspection — COMPLETE
+- Registry AccessCheck / Effective Access Evaluation — COMPLETE
+- service inspection
 
 ## Advanced
 

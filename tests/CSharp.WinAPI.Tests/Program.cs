@@ -6,6 +6,7 @@ using CSharp.WinAPI.Processes;
 using CSharp.WinAPI.Threads;
 using CSharp.WinAPI.Tokens;
 using CSharp.WinAPI.Security;
+using CSharp.WinAPI.Registry;
 
 var FixedCms = Convert.FromBase64String("MIIExwYJKoZIhvcNAQcCoIIEuDCCBLQCAQExDTALBglghkgBZQMEAgEwEgYJKoZIhvcNAQcBoAUEAwECA6CCAw4wggMKMIIB8qADAgECAggdZs60nr5UFTANBgkqhkiG9w0BAQsFADBFMQswCQYDVQQGEwJVUzEWMBQGA1UEChMNQmx1ZVRlYW0gTGFiczEeMBwGA1UEAxMVQ1NoYXJwLVdpbkFQSSBGaXh0dXJlMB4XDTI0MDEwMTAwMDAwMFoXDTMwMDEwMTAwMDAwMFowRTELMAkGA1UEBhMCVVMxFjAUBgNVBAoTDUJsdWVUZWFtIExhYnMxHjAcBgNVBAMTFUNTaGFycC1XaW5BUEkgRml4dHVyZTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAOn7dkQvMA146Z5D97EEquUMv93h0bRqGSApRY34kRS7wC2K2vjIZ3rqKUnU8Z1l7g2uO+97HQvwIrMG8dSCfpVeIcgV108U03FQsx+qxSXbm9NaVDVa4tMf1ez96wbCC2sJyV0tzAurYKRTefBY4D/BgVJiUKpXYYxQmr3CZ+4mYUitBZOeAdPCtnEG8b/OP9XEfmlfHoi4nhMIfe82OyTtFHmERxxFcb/PmlaEgpwtxf4nw0UP2st/k1aIcQ7gQF0eBQIEt+X0qMvv4jWrOYs979cwGq90nqwva9DwrseCJxc019eTKeVaGkmqm+xdAdeTazAUa5kL1JDRuGphrp0CAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAMu/QKioJWUCEolVX6j/GqYx3P7o6tZ/HyixjVNN6qwkDZTg4Mlz9T9d6usTFFbCXLujMBJI4EFWvN4MoeJsYaSuhf8N1Ok+TkoypWrNn+TKLlkLAjIjUTX01PKWYfqB1F6f0f9KmjCykrhgNQUwcYyCnP38R0H26cGzNyRK5ph7XutM4fXpLGbOw8hjQ5nUdlFhChS+A7cw0KoV8ez5sjdRIvUBZNp6nxBvNJurreHaYlAvV/0Q78/x+FuT76Xv7Y6sdJZYxBcgGuMOxx9LVITRVQmcdDVz2+03UBM4dPLpad25qIQLs0NBOl2Du1vuo6+ECEml2abg5rvkdm9FmXzGCAXgwggF0AgEBMFEwRTELMAkGA1UEBhMCVVMxFjAUBgNVBAoTDUJsdWVUZWFtIExhYnMxHjAcBgNVBAMTFUNTaGFycC1XaW5BUEkgRml4dHVyZQIIHWbOtJ6+VBUwCwYJYIZIAWUDBAIBMAsGCSqGSIb3DQEBAQSCAQB2rWkuriJPPD/L+KNmdT5tRbMH8UcLMkxFZWfyadR2qK6BtQauZ/pBBj3VTuLyC1/RJGM6q5m7S1T6a6TOU06pzE7qHyu1NiaAyeOX8hJUdHR/L1UK/i9sKTb6f84o4mppe3CoLQSO1FGMJdHoqYGbSX+psX/8npyPdYfJZZQEkTlI7S32kNSBl878vV3OQO8TlEMolxTLN1KpZR00Qn6EDpuqhPckyS3Rcnw1FWao2C3Q0OUOzXgxU/H+dBKZJRfoBx0+fE8SsBb/FrW8/1PBiQr6W1R4jnMaYFvHnsEbL+1cdkpTK+TZNFaUiLd9r2HFGi6Mzi0lWimlcU+4VEC2");
 
@@ -202,6 +203,105 @@ Run("AccessCheck can be repeated without retaining duplicated tokens", () =>
     var path = Path.GetTempFileName();
     try { for (var iteration = 0; iteration < 100; iteration++) Assert(accessCheckInspector.EvaluatePathAccess(path, 1).IsGranted, "Repeated AccessCheck denied temporary-file read."); }
     finally { File.Delete(path); }
+});
+
+var registrySecurityInspector = new RegistrySecurityInspector();
+var registryAccessCheckInspector = new RegistryAccessCheckInspector();
+var currentUserSoftware = new RegistryKeyPath(RegistryHive.CurrentUser, "Software");
+
+Run("registry security inspection exposes authoritative and immutable descriptor metadata", () =>
+{
+    var key = registrySecurityInspector.Inspect(currentUserSoftware);
+    Assert(key.Path == currentUserSoftware, "The registry path was not preserved.");
+    Assert(!string.IsNullOrWhiteSpace(key.Owner?.Sid), "The registry key owner SID was empty.");
+    Assert(key.Group is null || !string.IsNullOrWhiteSpace(key.Group.Sid), "The registry key group SID was empty.");
+    Assert(key.Dacl.IsPresent || !key.Dacl.IsNull, "The registry DACL state was not represented.");
+    Assert(key.ControlRevision > 0, "The registry security-descriptor revision was not preserved.");
+    if (key.Dacl.Entries.Count > 0)
+    {
+        Assert(key.Dacl.Entries.All(ace => ace.RawType <= byte.MaxValue), "A registry ACE type was not preserved.");
+        Assert(key.Dacl.Entries.Where(ace => ace.Type != AccessControlEntryType.Unknown).All(ace => ace.AccessMask is not null && ace.Trustee is not null), "A supported registry ACE lost its mask or SID.");
+        AssertCollectionSnapshot(key.Dacl.Entries, "registry DACL entries");
+    }
+});
+
+Run("registry security inspection preserves LSTATUS for missing keys", () =>
+{
+    var missing = new RegistryKeyPath(RegistryHive.CurrentUser, $"Software\\CSharp-WinAPI-Missing-{Guid.NewGuid():N}");
+    try
+    {
+        _ = registrySecurityInspector.Inspect(missing);
+        throw new InvalidOperationException("A nonexistent registry key unexpectedly had a descriptor.");
+    }
+    catch (RegistrySecurityException exception)
+    {
+        Assert(exception.Operation == "RegOpenKeyEx", $"Unexpected registry operation: {exception.Operation}.");
+        Assert(exception.Path == missing && exception.NativeErrorCode == 2, "The registry LSTATUS was not preserved.");
+    }
+});
+
+Run("registry security inspection validates paths and supports explicit views", () =>
+{
+    try
+    {
+        _ = registrySecurityInspector.Inspect(new RegistryKeyPath(RegistryHive.CurrentUser, ""));
+        throw new InvalidOperationException("An empty registry subkey unexpectedly inspected.");
+    }
+    catch (ArgumentException)
+    {
+    }
+
+    if (Environment.Is64BitOperatingSystem)
+    {
+        Assert(registrySecurityInspector.Inspect(new RegistryKeyPath(RegistryHive.CurrentUser, "Software", RegistryView.Registry32)).Owner is not null, "The 32-bit registry view was not readable.");
+        Assert(registrySecurityInspector.Inspect(new RegistryKeyPath(RegistryHive.CurrentUser, "Software", RegistryView.Registry64)).Owner is not null, "The 64-bit registry view was not readable.");
+    }
+});
+
+Run("registry security inspection can be repeated without retaining key handles or pinned buffers", () =>
+{
+    for (var iteration = 0; iteration < 100; iteration++)
+    {
+        Assert(registrySecurityInspector.Inspect(currentUserSoftware).Owner is not null, "Repeated registry inspection lost the owner.");
+    }
+});
+
+Run("registry AccessCheck uses registry generic mappings and preserves its native decision", () =>
+{
+    var result = registryAccessCheckInspector.EvaluateCurrentProcessKeyAccess(currentUserSoftware, 0x80000000); // GENERIC_READ
+    Assert(result.DesiredAccess == 0x80000000, "The registry desired mask changed.");
+    Assert(result.MappedDesiredAccess == 0x00020019, $"Expected registry GENERIC_READ to map to 0x00020019, got 0x{result.MappedDesiredAccess:X8}.");
+    Assert(result.MappedDesiredAccess != 0x00120089, "Registry AccessCheck incorrectly used the file generic mapping.");
+    Assert(result.PrivilegesUsed is not PrivilegeUseInfo[], "Registry AccessCheck privileges exposed their backing array.");
+    if (result.PrivilegesUsed.Count > 0) AssertCollectionSnapshot(result.PrivilegesUsed, "registry AccessCheck privileges");
+});
+
+Run("registry AccessCheck preserves descriptor failures separately", () =>
+{
+    var missing = new RegistryKeyPath(RegistryHive.CurrentUser, $"Software\\CSharp-WinAPI-AccessCheck-{Guid.NewGuid():N}");
+    try
+    {
+        _ = registryAccessCheckInspector.EvaluateCurrentProcessKeyAccess(missing, 1);
+        throw new InvalidOperationException("A nonexistent registry key unexpectedly evaluated.");
+    }
+    catch (RegistrySecurityException exception)
+    {
+        Assert(exception.NativeErrorCode == 2, "The registry descriptor LSTATUS was not preserved.");
+    }
+});
+
+Run("registry AccessCheck permits environment-dependent authorization denials", () =>
+{
+    var result = registryAccessCheckInspector.EvaluateCurrentProcessKeyAccess(currentUserSoftware, 0x00000002); // KEY_SET_VALUE
+    Assert(result.DesiredAccess == 0x00000002 && (result.GrantedAccess & ~result.MappedDesiredAccess) == 0, "Registry AccessCheck returned an inconsistent decision.");
+});
+
+Run("registry AccessCheck can be repeated without retaining duplicated tokens", () =>
+{
+    for (var iteration = 0; iteration < 100; iteration++)
+    {
+        _ = registryAccessCheckInspector.EvaluateCurrentProcessKeyAccess(currentUserSoftware, 0x00000001); // KEY_QUERY_VALUE
+    }
 });
 
 var threadInspector = new ThreadInspector();
