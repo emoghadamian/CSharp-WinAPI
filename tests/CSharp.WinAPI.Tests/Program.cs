@@ -4,6 +4,7 @@ using CSharp.WinAPI.Modules;
 using CSharp.WinAPI.Pe;
 using CSharp.WinAPI.Processes;
 using CSharp.WinAPI.Threads;
+using CSharp.WinAPI.Tokens;
 
 var FixedCms = Convert.FromBase64String("MIIExwYJKoZIhvcNAQcCoIIEuDCCBLQCAQExDTALBglghkgBZQMEAgEwEgYJKoZIhvcNAQcBoAUEAwECA6CCAw4wggMKMIIB8qADAgECAggdZs60nr5UFTANBgkqhkiG9w0BAQsFADBFMQswCQYDVQQGEwJVUzEWMBQGA1UEChMNQmx1ZVRlYW0gTGFiczEeMBwGA1UEAxMVQ1NoYXJwLVdpbkFQSSBGaXh0dXJlMB4XDTI0MDEwMTAwMDAwMFoXDTMwMDEwMTAwMDAwMFowRTELMAkGA1UEBhMCVVMxFjAUBgNVBAoTDUJsdWVUZWFtIExhYnMxHjAcBgNVBAMTFUNTaGFycC1XaW5BUEkgRml4dHVyZTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAOn7dkQvMA146Z5D97EEquUMv93h0bRqGSApRY34kRS7wC2K2vjIZ3rqKUnU8Z1l7g2uO+97HQvwIrMG8dSCfpVeIcgV108U03FQsx+qxSXbm9NaVDVa4tMf1ez96wbCC2sJyV0tzAurYKRTefBY4D/BgVJiUKpXYYxQmr3CZ+4mYUitBZOeAdPCtnEG8b/OP9XEfmlfHoi4nhMIfe82OyTtFHmERxxFcb/PmlaEgpwtxf4nw0UP2st/k1aIcQ7gQF0eBQIEt+X0qMvv4jWrOYs979cwGq90nqwva9DwrseCJxc019eTKeVaGkmqm+xdAdeTazAUa5kL1JDRuGphrp0CAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAMu/QKioJWUCEolVX6j/GqYx3P7o6tZ/HyixjVNN6qwkDZTg4Mlz9T9d6usTFFbCXLujMBJI4EFWvN4MoeJsYaSuhf8N1Ok+TkoypWrNn+TKLlkLAjIjUTX01PKWYfqB1F6f0f9KmjCykrhgNQUwcYyCnP38R0H26cGzNyRK5ph7XutM4fXpLGbOw8hjQ5nUdlFhChS+A7cw0KoV8ez5sjdRIvUBZNp6nxBvNJurreHaYlAvV/0Q78/x+FuT76Xv7Y6sdJZYxBcgGuMOxx9LVITRVQmcdDVz2+03UBM4dPLpad25qIQLs0NBOl2Du1vuo6+ECEml2abg5rvkdm9FmXzGCAXgwggF0AgEBMFEwRTELMAkGA1UEBhMCVVMxFjAUBgNVBAoTDUJsdWVUZWFtIExhYnMxHjAcBgNVBAMTFUNTaGFycC1XaW5BUEkgRml4dHVyZQIIHWbOtJ6+VBUwCwYJYIZIAWUDBAIBMAsGCSqGSIb3DQEBAQSCAQB2rWkuriJPPD/L+KNmdT5tRbMH8UcLMkxFZWfyadR2qK6BtQauZ/pBBj3VTuLyC1/RJGM6q5m7S1T6a6TOU06pzE7qHyu1NiaAyeOX8hJUdHR/L1UK/i9sKTb6f84o4mppe3CoLQSO1FGMJdHoqYGbSX+psX/8npyPdYfJZZQEkTlI7S32kNSBl878vV3OQO8TlEMolxTLN1KpZR00Qn6EDpuqhPckyS3Rcnw1FWao2C3Q0OUOzXgxU/H+dBKZJRfoBx0+fE8SsBb/FrW8/1PBiQr6W1R4jnMaYFvHnsEbL+1cdkpTK+TZNFaUiLd9r2HFGi6Mzi0lWimlcU+4VEC2");
 
@@ -80,6 +81,61 @@ Run("process inspection can be repeated without retaining handles", () =>
         var processes = processInspector.EnumerateProcesses();
         Assert(processes.Count > 0, "Process enumeration returned no entries.");
     }
+});
+
+var tokenInspector = new TokenInspector();
+
+Run("current process token exposes read-only identity and security metadata", () =>
+{
+    var token = tokenInspector.InspectCurrentProcessToken();
+    var process = processInspector.InspectProcess((uint)Environment.ProcessId);
+    Assert(token.ProcessId == (uint)Environment.ProcessId, "The token PID did not match the current process.");
+    Assert(!string.IsNullOrWhiteSpace(token.User.Sid), "The token user SID was empty.");
+    Assert(token.Groups.Count > 0, "The token contained no groups.");
+    Assert(token.Privileges.Count > 0, "The token contained no privileges.");
+    Assert(!string.IsNullOrWhiteSpace(token.IntegrityLevel.Sid), "The token integrity SID was empty.");
+    Assert(process.SessionId is not null && token.SessionId == process.SessionId.Value, "The token session did not match the current process session.");
+    Assert(token.Type.Value == TokenType.Primary, "The current process did not expose a primary token.");
+    Assert(token.ImpersonationLevel is null, "A primary token unexpectedly exposed an impersonation level.");
+});
+
+Run("invalid token process IDs preserve contextual native errors", () =>
+{
+    try
+    {
+        _ = tokenInspector.InspectProcessToken(uint.MaxValue);
+        throw new InvalidOperationException("The impossible PID unexpectedly had a token.");
+    }
+    catch (TokenInspectionException exception)
+    {
+        Assert(exception.ProcessId == uint.MaxValue, "The token exception did not preserve the target PID.");
+        Assert(exception.Operation == "OpenProcess", $"Expected OpenProcess, got {exception.Operation}.");
+        Assert(exception.NativeErrorCode != 0, "The token exception lost the native error code.");
+    }
+});
+
+Run("token inspection can be repeated without retaining handles", () =>
+{
+    for (var iteration = 0; iteration < 100; iteration++)
+    {
+        var token = tokenInspector.InspectCurrentProcessToken();
+        Assert(!string.IsNullOrWhiteSpace(token.User.Sid), "Repeated token inspection returned no user SID.");
+    }
+});
+
+Run("token collections are immutable snapshots", () =>
+{
+    var token = tokenInspector.InspectCurrentProcessToken();
+    AssertCollectionSnapshot(token.Groups, "token groups");
+    AssertCollectionSnapshot(token.Privileges, "token privileges");
+});
+
+Run("token models retain unknown native enum values", () =>
+{
+    var type = new TokenTypeInfo(uint.MaxValue, TokenType.Unknown);
+    var level = new TokenImpersonationLevelInfo(uint.MaxValue, TokenImpersonationLevel.Unknown);
+    Assert(type.RawValue == uint.MaxValue && type.Value == TokenType.Unknown, "An unknown token type lost its raw value.");
+    Assert(level.RawValue == uint.MaxValue && level.Value == TokenImpersonationLevel.Unknown, "An unknown impersonation level lost its raw value.");
 });
 
 var threadInspector = new ThreadInspector();

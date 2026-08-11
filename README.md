@@ -43,7 +43,7 @@ Both enumeration APIs preserve their `NET_API_STATUS` return code in `NetApiExce
 
 ## 🧠 Windows Internals
 
-The current modules introduce local security groups, SID usage, account membership, RPC-allocated result buffers, Toolhelp process/thread/module snapshots, process handles, session IDs, thread priorities, module base addresses, WOW64 architecture, and virtual-memory region metadata. Token, service, registry, and window modules are planned next.
+The current modules introduce local security groups, SID usage, account membership, RPC-allocated result buffers, Toolhelp process/thread/module snapshots, process handles, session IDs, thread priorities, module base addresses, WOW64 architecture, virtual-memory region metadata, and read-only process access-token metadata. Service, registry, and window modules are planned next.
 
 ## 🔍 Process Inspection
 
@@ -87,11 +87,17 @@ PE inspection also parses the Certificate Table as a file offset, aligned `WIN_C
 
 See [PE Certificate Table](docs/pe-certificates.md).
 
+## Access Token APIs
+
+Implemented read-only process access-token inspection through `OpenProcessToken` and `GetTokenInformation`. `TokenInspector` exposes the user SID, groups, privileges, elevation, integrity level, session, token type, and impersonation level without exposing token handles or modifying security state.
+
+See [Access-token inspection](docs/tokens.md).
+
 ## 🔐 Security APIs
 
-Implemented: read-only local-group and member enumeration.
+Implemented: read-only local-group/member enumeration and access-token inspection.
 
-Planned: access tokens, users, privileges, integrity levels, and elevation state.
+Planned: users, services, registry, and window inspection.
 
 ## 🛡️ Blue Team Use Cases
 
@@ -113,6 +119,7 @@ src/CSharp.WinAPI/                 reusable library
   Modules/                         managed read-only module abstraction
   Memory/                          managed read-only virtual-memory metadata abstraction
   Pe/                              managed read-only executable-image parsing
+  Tokens/                          managed read-only access-token abstraction
 examples/learning/                 minimal interop demonstrations
 examples/security/                 defensive investigation examples
 examples/processes/                process inspection examples
@@ -120,6 +127,7 @@ examples/threads/                  thread inspection examples
 examples/modules/                  module and DLL inspection examples
 examples/memory/                   virtual-memory inspection examples
 examples/pe/                       executable-image inspection examples
+examples/tokens/                   access-token inspection examples
 tests/CSharp.WinAPI.Tests/         dependency-free executable integration tests
 docs/                              interop guidance, security notes, and roadmap
 ```
@@ -185,6 +193,8 @@ The module targets Windows and uses Unicode Netapi32 APIs available since Window
 | PE images | Export Directory, named/ordinal exports, forwarders | Yes | Yes | Yes |
 | PE images | Certificate Table and aligned `WIN_CERTIFICATE` entries | Yes | Yes | Yes |
 | PE images | PKCS#7 / CMS and public X.509 metadata | Yes | Yes | Yes |
+| Access tokens | `OpenProcessToken`, `GetTokenInformation`, and `CloseHandle` | Yes | Yes | Yes |
+| Access tokens | User, groups, privileges, elevation, integrity, session, type, and impersonation-level reporting | Yes | Yes | Yes |
 
 ## 🤝 Contributing
 
