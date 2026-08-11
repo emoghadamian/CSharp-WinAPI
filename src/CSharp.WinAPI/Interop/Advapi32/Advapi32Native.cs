@@ -49,9 +49,24 @@ internal static partial class Advapi32Native
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool ConvertSidToStringSid(nint sid, out nint stringSid);
 
+    [LibraryImport("advapi32.dll", EntryPoint = "DuplicateToken", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool DuplicateToken(SafeTokenHandle existingToken, SecurityImpersonationLevel impersonationLevel, out SafeTokenHandle duplicateToken);
+
+    [LibraryImport("advapi32.dll", EntryPoint = "AccessCheck", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool AccessCheck(nint securityDescriptor, SafeTokenHandle clientToken, uint desiredAccess, in GenericMappingNative genericMapping, nint privilegeSet, ref uint privilegeSetLength, out uint grantedAccess, [MarshalAs(UnmanagedType.Bool)] out bool accessStatus);
+
+    [LibraryImport("advapi32.dll", EntryPoint = "MapGenericMask")]
+    internal static partial void MapGenericMask(ref uint accessMask, in GenericMappingNative genericMapping);
+
     [LibraryImport("advapi32.dll", EntryPoint = "OpenProcessToken", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     internal static partial bool OpenProcessToken(SafeProcessHandle process, TokenAccessRights desiredAccess, out SafeTokenHandle token);
+
+    [LibraryImport("advapi32.dll", EntryPoint = "OpenProcessToken", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static partial bool OpenProcessToken(nint process, TokenAccessRights desiredAccess, out SafeTokenHandle token);
 
     [LibraryImport("advapi32.dll", EntryPoint = "GetTokenInformation", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

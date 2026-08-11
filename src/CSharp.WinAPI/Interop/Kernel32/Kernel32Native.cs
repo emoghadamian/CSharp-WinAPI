@@ -5,6 +5,8 @@ namespace CSharp.WinAPI.Interop.Kernel32;
 /// <summary>Raw declarations for documented Kernel32 process-inspection APIs.</summary>
 internal static partial class Kernel32Native
 {
+    [LibraryImport("kernel32.dll", EntryPoint = "GetCurrentProcess")]
+    internal static partial nint GetCurrentProcess();
     internal const uint Th32CsSnapProcess = 0x00000002;
     internal const uint Th32CsSnapThread = 0x00000004;
     internal const uint Th32CsSnapModule = 0x00000008;

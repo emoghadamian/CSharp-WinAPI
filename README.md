@@ -99,6 +99,8 @@ Implemented: read-only local-group/member enumeration and access-token inspectio
 
 File Security Descriptor / ACL Inspection is also implemented for files and directories, including owner/group SIDs, DACL state, ACEs, access masks, inheritance, and control flags. See [file-security.md](docs/file-security.md).
 
+AccessCheck / Effective Access Evaluation is implemented for the current process token against files and directories. It preserves desired, mapped, and granted masks; an authorization denial is a normal result. See [access-check.md](docs/access-check.md).
+
 Planned: users, services, registry, and window inspection.
 
 ## 🛡️ Blue Team Use Cases

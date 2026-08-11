@@ -46,3 +46,12 @@ internal struct AceHeaderNative
     internal byte Flags;
     internal ushort Size;
 }
+
+[StructLayout(LayoutKind.Sequential)]
+internal struct GenericMappingNative
+{
+    internal uint GenericRead;
+    internal uint GenericWrite;
+    internal uint GenericExecute;
+    internal uint GenericAll;
+}

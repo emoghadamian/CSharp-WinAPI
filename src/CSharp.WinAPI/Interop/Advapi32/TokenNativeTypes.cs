@@ -5,7 +5,14 @@ namespace CSharp.WinAPI.Interop.Advapi32;
 [Flags]
 internal enum TokenAccessRights : uint
 {
+    Duplicate = 0x0002,
     Query = 0x0008,
+}
+
+internal enum SecurityImpersonationLevel
+{
+    Identification = 1,
+    Impersonation = 2,
 }
 
 internal enum TokenInformationClass

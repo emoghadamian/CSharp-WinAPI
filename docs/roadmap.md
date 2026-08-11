@@ -17,6 +17,7 @@
 - PE Certificate Table file-offset inspection, WIN_CERTIFICATE parsing, PKCS#7/CMS metadata, and public X.509 metadata
 - access-token inspection: user, groups, privileges, elevation, integrity, session, type, and impersonation level — COMPLETE
 - File Security Descriptor / ACL inspection — COMPLETE
+- AccessCheck / Effective Access Evaluation — COMPLETE
 - service and registry inspection
 
 ## Advanced

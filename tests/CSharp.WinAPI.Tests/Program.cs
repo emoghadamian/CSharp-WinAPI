@@ -171,6 +171,39 @@ Run("file-security inspection can be repeated without retaining descriptor buffe
     File.Delete(path);
 });
 
+var accessCheckInspector = new AccessCheckInspector();
+
+Run("AccessCheck evaluates current-token file and directory access", () =>
+{
+    var filePath = Path.GetTempFileName();
+    try
+    {
+        var fileResult = accessCheckInspector.EvaluatePathAccess(filePath, 0x80000000); // GENERIC_READ
+        var directoryResult = accessCheckInspector.EvaluatePathAccess(Path.GetTempPath(), 0x00000001); // FILE_LIST_DIRECTORY
+        Assert(fileResult.IsGranted, "The current process was denied generic read on its temporary file.");
+        Assert(directoryResult.DesiredAccess == 1, "The directory desired access changed.");
+        Assert((fileResult.MappedDesiredAccess & 0x80000000) == 0, "GENERIC_READ was not mapped before AccessCheck.");
+        Assert(fileResult.GrantedAccess != 0, "Granted access was not preserved.");
+        Assert(fileResult.PrivilegesUsed is not PrivilegeUseInfo[], "AccessCheck privileges exposed their backing array.");
+        if (fileResult.PrivilegesUsed.Count > 0) AssertCollectionSnapshot(fileResult.PrivilegesUsed, "AccessCheck privileges");
+    }
+    finally { File.Delete(filePath); }
+});
+
+Run("AccessCheck preserves security descriptor failures separately", () =>
+{
+    var path = Path.Combine(Path.GetTempPath(), $"CSharp-WinAPI-AccessCheck-{Guid.NewGuid():N}");
+    try { _ = accessCheckInspector.EvaluatePathAccess(path, 1); throw new InvalidOperationException("The missing path unexpectedly evaluated."); }
+    catch (FileSecurityInspectionException exception) { Assert(exception.NativeErrorCode != 0, "The descriptor error lost its native code."); }
+});
+
+Run("AccessCheck can be repeated without retaining duplicated tokens", () =>
+{
+    var path = Path.GetTempFileName();
+    try { for (var iteration = 0; iteration < 100; iteration++) Assert(accessCheckInspector.EvaluatePathAccess(path, 1).IsGranted, "Repeated AccessCheck denied temporary-file read."); }
+    finally { File.Delete(path); }
+});
+
 var threadInspector = new ThreadInspector();
 
 Run("thread enumeration returns at least one thread", () =>
