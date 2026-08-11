@@ -107,10 +107,14 @@ public sealed class FileSecurityInspector
             throw new FileSecurityInspectionException("DACL header", path, ErrorInvalidParameter);
         }
 
-        if (!Advapi32Native.GetAclInformation(dacl, out var sizeInformation, (uint)Marshal.SizeOf<AclSizeInformationNative>(), AclInformationClass.AclSizeInformation) ||
-            sizeInformation.AceCount != header.AceCount || sizeInformation.AclBytesInUse < Marshal.SizeOf<AclNative>() || sizeInformation.AclBytesInUse > header.Size)
+        if (!Advapi32Native.GetAclInformation(dacl, out var sizeInformation, (uint)Marshal.SizeOf<AclSizeInformationNative>(), AclInformationClass.AclSizeInformation))
         {
             throw LastError(nameof(Advapi32Native.GetAclInformation), path);
+        }
+
+        if (sizeInformation.AceCount != header.AceCount || sizeInformation.AclBytesInUse < Marshal.SizeOf<AclNative>() || sizeInformation.AclBytesInUse > header.Size)
+        {
+            throw new FileSecurityInspectionException(nameof(Advapi32Native.GetAclInformation), path, ErrorInvalidParameter);
         }
 
         var entries = new List<AccessControlEntryInfo>((int)header.AceCount);

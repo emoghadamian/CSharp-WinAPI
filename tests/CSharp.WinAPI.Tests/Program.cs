@@ -150,7 +150,9 @@ Run("file and directory security descriptors expose immutable DACL metadata", ()
     Assert(file.Dacl.IsPresent || !file.Dacl.IsNull, "The file DACL state was not represented.");
     if (file.Dacl.Entries.Count > 0)
     {
-        Assert(file.Dacl.Entries[0].RawType <= byte.MaxValue, "The ACE type was not preserved.");
+        Assert(file.Dacl.Entries.All(ace => ace.RawType <= byte.MaxValue), "An ACE type was not preserved.");
+        Assert(file.Dacl.Entries.Where(ace => ace.Type != AccessControlEntryType.Unknown).All(ace => ace.AccessMask is not null && ace.Trustee is not null), "A supported ACE lost its raw access mask or SID.");
+        Assert(file.Dacl.Entries.All(ace => ace.IsInherited == ace.Flags.HasFlag(AccessControlEntryFlags.Inherited)), "Inherited ACE detection did not preserve the native flag.");
         AssertCollectionSnapshot(file.Dacl.Entries, "file DACL entries");
     }
 });
