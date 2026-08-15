@@ -85,6 +85,12 @@ Implemented read-only local channel enumeration and bounded XPath inspection thr
 
 See [Windows Event Log inspection](docs/event-log.md).
 
+## Scheduled Task APIs
+
+Implemented read-only local Task Scheduler metadata inspection through its documented COM automation interfaces, including bounded folder/task enumeration, principals, settings, triggers, and actions. It does not register, run, stop, enable, disable, or delete tasks.
+
+See [Scheduled Task inspection](docs/scheduled-tasks.md).
+
 ## 🧱 PE Image APIs
 
 Implemented read-only on-disk PE inspection for validated PE32 and PE32+ headers, sections, data directories, and RVA-to-file-offset mapping. The parser does not load, execute, or modify images.
@@ -156,6 +162,7 @@ examples/tokens/                   access-token inspection examples
 examples/registry/                 registry security inspection examples
 examples/services/                 Windows service inspection examples
 examples/events/                   Windows Event Log inspection examples
+examples/tasks/                    Scheduled Task inspection examples
 tests/CSharp.WinAPI.Tests/         dependency-free executable integration tests
 docs/                              interop guidance, security notes, and roadmap
 ```
@@ -191,6 +198,7 @@ dotnet run --project tests/CSharp.WinAPI.Tests --configuration Debug
 9. `examples/registry/RegistrySecurityInspection` — `READ_CONTROL`, caller-owned descriptors, DACLs, ACEs, and registry views.
 10. `examples/services/ServiceInspection` â€” SCM enumeration, configuration buffers, and service/process correlation.
 11. `examples/events/EventLogInspection` — bounded local Event Log enumeration, query, and XML rendering.
+12. `examples/tasks/ScheduledTaskInspection` — bounded local Task Scheduler metadata inspection.
 11. See the [full roadmap](docs/roadmap.md).
 
 ## ⚠️ Privileges & Windows Version Considerations
@@ -233,6 +241,7 @@ The module targets Windows and uses Unicode Netapi32 APIs available since Window
 | Services | `OpenSCManagerW`, `EnumServicesStatusExW`, and `SERVICE_STATUS_PROCESS` | Yes | Yes | Yes |
 | Services | `OpenServiceW`, `QueryServiceConfigW`, and `CloseServiceHandle` SafeHandle ownership | Yes | Yes | Yes |
 | Event logs | `EvtOpenChannelEnum`, `EvtNextChannelPath`, `EvtQuery`, `EvtNext`, `EvtRender`, and `EvtClose` | Yes | Yes | Yes |
+| Scheduled tasks | Local Task Scheduler 2.0 COM enumeration and definition metadata | Yes | Yes | Yes |
 
 ## 🤝 Contributing
 

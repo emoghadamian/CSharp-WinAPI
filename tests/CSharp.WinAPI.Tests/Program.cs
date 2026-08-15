@@ -9,6 +9,7 @@ using CSharp.WinAPI.Security;
 using CSharp.WinAPI.Registry;
 using CSharp.WinAPI.Services;
 using CSharp.WinAPI.Events;
+using CSharp.WinAPI.Tasks;
 using System.Buffers.Binary;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -558,6 +559,28 @@ Run("event log XML parsing is namespace-aware bounded and secure", () =>
 Run("event log handles are released across repeated enumeration query and render", () =>
 {
     for (var iteration = 0; iteration < 100; iteration++) { Assert(eventLogInspector.EnumerateChannels().Count > 0, "Repeated channel enumeration failed."); Assert(eventLogInspector.Query("System", "*", 1).Single().Xml.Length > 0, "Repeated query/render failed."); }
+});
+
+var scheduledTaskInspector = new ScheduledTaskInspector();
+
+Run("scheduled task inspection returns bounded immutable local metadata", () =>
+{
+    var tasks = scheduledTaskInspector.EnumerateTasks();
+    Assert(tasks.Count > 0 && tasks.All(task => task.Path.StartsWith('\\') && task.State.RawValue >= 0), "Task Scheduler returned invalid task metadata.");
+    AssertCollectionSnapshot(tasks, "scheduled tasks");
+    var taskWithAction = tasks.FirstOrDefault(task => task.Actions.Count > 0);
+    if (taskWithAction is not null) AssertCollectionSnapshot(taskWithAction.Actions, "scheduled task actions");
+    var taskWithTrigger = tasks.FirstOrDefault(task => task.Triggers.Count > 0);
+    if (taskWithTrigger is not null) AssertCollectionSnapshot(taskWithTrigger.Triggers, "scheduled task triggers");
+});
+
+Run("scheduled task inspection validates paths and repeated COM lifetimes", () =>
+{
+    AssertThrows<ArgumentException>(() => scheduledTaskInspector.EnumerateTasks(""), "An empty task folder path was accepted.");
+    AssertThrows<ArgumentException>(() => scheduledTaskInspector.EnumerateTasks("System\\bad"), "A relative task folder path was accepted.");
+    AssertThrows<ArgumentException>(() => scheduledTaskInspector.EnumerateTasks("\\bad\0path"), "A null-containing task folder path was accepted.");
+    AssertThrows<ArgumentException>(() => scheduledTaskInspector.EnumerateTasks($"\\{new string('x', 32_768)}"), "An oversized task folder path was accepted.");
+    for (var iteration = 0; iteration < 3; iteration++) Assert(scheduledTaskInspector.EnumerateTasks("\\").Count > 0, "Repeated Task Scheduler enumeration failed.");
 });
 
 var threadInspector = new ThreadInspector();
