@@ -20,7 +20,7 @@
 - AccessCheck / Effective Access Evaluation — COMPLETE
 - Registry Security Descriptor / ACL inspection — COMPLETE
 - Registry AccessCheck / Effective Access Evaluation — COMPLETE
-- service inspection
+- service inspection â€” COMPLETE
 
 ## Advanced
 

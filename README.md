@@ -47,7 +47,7 @@ Both enumeration APIs preserve their `NET_API_STATUS` return code in `NetApiExce
 
 ## 🧠 Windows Internals
 
-The current modules introduce local security groups, SID usage, account membership, RPC-allocated result buffers, Toolhelp process/thread/module snapshots, process handles, session IDs, thread priorities, module base addresses, WOW64 architecture, virtual-memory region metadata, and read-only process access-token metadata. Service, registry, and window modules are planned next.
+The current modules introduce local security groups, SID usage, account membership, RPC-allocated result buffers, Toolhelp process/thread/module snapshots, process handles, session IDs, thread priorities, module base addresses, WOW64 architecture, virtual-memory region metadata, read-only access-token metadata, file and registry security metadata, and Windows service metadata. User and window modules are planned next.
 
 ## 🔍 Process Inspection
 
@@ -72,6 +72,12 @@ See [Virtual-memory inspection](docs/memory.md).
 Implemented read-only Toolhelp module enumeration through `Module32FirstW` and `Module32NextW`. `ModuleInspector` exposes name, path, unsigned pointer-sized base address, image size, and owning PID.
 
 See [Module and DLL inspection](docs/modules.md).
+
+## Windows Service APIs
+
+Implemented read-only local service inventory and configuration inspection through `OpenSCManagerW`, `EnumServicesStatusExW`, `OpenServiceW`, and `QueryServiceConfigW`. The laboratory exposes SCM status, process correlation IDs, and stored configuration without starting, stopping, changing, or securing services.
+
+See [Windows service inspection](docs/services.md).
 
 ## 🧱 PE Image APIs
 
@@ -142,6 +148,7 @@ examples/memory/                   virtual-memory inspection examples
 examples/pe/                       executable-image inspection examples
 examples/tokens/                   access-token inspection examples
 examples/registry/                 registry security inspection examples
+examples/services/                 Windows service inspection examples
 tests/CSharp.WinAPI.Tests/         dependency-free executable integration tests
 docs/                              interop guidance, security notes, and roadmap
 ```
@@ -175,7 +182,8 @@ dotnet run --project tests/CSharp.WinAPI.Tests --configuration Debug
 7. `examples/memory/VirtualMemoryInspection` — virtual-memory region metadata and safe traversal.
 8. `examples/pe/PeInspection` — PE headers, sections, directories, and RVA mapping.
 9. `examples/registry/RegistrySecurityInspection` — `READ_CONTROL`, caller-owned descriptors, DACLs, ACEs, and registry views.
-10. See the [full roadmap](docs/roadmap.md).
+10. `examples/services/ServiceInspection` â€” SCM enumeration, configuration buffers, and service/process correlation.
+11. See the [full roadmap](docs/roadmap.md).
 
 ## ⚠️ Privileges & Windows Version Considerations
 
@@ -214,6 +222,8 @@ The module targets Windows and uses Unicode Netapi32 APIs available since Window
 | Registry security | `RegOpenKeyExW`, `RegGetKeySecurity`, `RegCloseKey`, and SafeHandle-owned opened keys | Yes | Yes | Yes |
 | Registry security | Owner/group SIDs, DACL state, ACEs, control flags, and registry views | Yes | Yes | Yes |
 | Registry effective access | `AccessCheck` with current-token bridge and registry `GENERIC_MAPPING` | Yes | Yes | Yes |
+| Services | `OpenSCManagerW`, `EnumServicesStatusExW`, and `SERVICE_STATUS_PROCESS` | Yes | Yes | Yes |
+| Services | `OpenServiceW`, `QueryServiceConfigW`, and `CloseServiceHandle` SafeHandle ownership | Yes | Yes | Yes |
 
 ## 🤝 Contributing
 

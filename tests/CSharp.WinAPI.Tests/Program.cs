@@ -7,6 +7,7 @@ using CSharp.WinAPI.Threads;
 using CSharp.WinAPI.Tokens;
 using CSharp.WinAPI.Security;
 using CSharp.WinAPI.Registry;
+using CSharp.WinAPI.Services;
 using System.Buffers.Binary;
 using System.Reflection;
 
@@ -393,6 +394,78 @@ Run("registry AccessCheck can be repeated without retaining duplicated tokens", 
     for (var iteration = 0; iteration < 100; iteration++)
     {
         _ = registryAccessCheckInspector.EvaluateCurrentProcessKeyAccess(currentUserSoftware, 0x00000001); // KEY_QUERY_VALUE
+    }
+});
+
+var serviceInspector = new ServiceInspector();
+
+Run("service enumeration returns immutable named status metadata", () =>
+{
+    var services = serviceInspector.EnumerateServices();
+    Assert(services.Count > 0, "No services were returned by the SCM.");
+    Assert(services.All(service => !string.IsNullOrWhiteSpace(service.Name)), "A service had no service name.");
+    Assert(services.All(service => service.DisplayName is not null), "A service had no display name.");
+    Assert(services.All(service => service.State.Value != ServiceState.Unknown || service.State.RawValue is < 1 or > 7), "A known service state was classified as unknown.");
+    Assert(services.Where(service => service.ProcessId != 0).All(service => (service.Type.KnownFlags & (ServiceType.Win32OwnProcess | ServiceType.Win32ShareProcess)) != 0), "A nonzero service PID was returned for a non-Win32 service type.");
+    AssertCollectionSnapshot(services, "service enumeration");
+});
+
+Run("service configuration preserves metadata and dependency snapshots", () =>
+{
+    var configuration = FindReadableServiceConfiguration(serviceInspector);
+    Assert(!string.IsNullOrWhiteSpace(configuration.ServiceName), "The configuration lost its service identity.");
+    Assert(configuration.StartType.Value != ServiceStartType.Unknown || configuration.StartType.RawValue > 4, "A known start type was classified as unknown.");
+    Assert(configuration.ErrorControl.Value != ServiceErrorControl.Unknown || configuration.ErrorControl.RawValue > 3, "A known error-control value was classified as unknown.");
+    Assert(configuration.Dependencies.All(dependency => !string.IsNullOrWhiteSpace(dependency.RawName) && dependency.Name.Length > 0), "A dependency string was malformed.");
+    if (configuration.Dependencies.Count > 0) AssertCollectionSnapshot(configuration.Dependencies, "service dependencies");
+});
+
+Run("invalid service names preserve contextual native errors", () =>
+{
+    const string missingService = "CSharpWinApiDefinitelyNotAService";
+    try
+    {
+        _ = serviceInspector.InspectConfiguration(missingService);
+        throw new InvalidOperationException("The deliberately invalid service unexpectedly existed.");
+    }
+    catch (ServiceInspectionException exception)
+    {
+        Assert(exception.Operation == "OpenService", $"Expected OpenService, got {exception.Operation}.");
+        Assert(exception.ServiceName == missingService && exception.NativeErrorCode == 1060, "The missing-service error was not preserved.");
+    }
+});
+
+Run("service inspection can be repeated without retaining SCM or service handles", () =>
+{
+    var name = FindReadableServiceConfiguration(serviceInspector).ServiceName;
+    for (var iteration = 0; iteration < 5; iteration++)
+    {
+        Assert(serviceInspector.EnumerateServices().Count > 0, "Repeated service enumeration returned no entries.");
+        Assert(serviceInspector.InspectConfiguration(name).ServiceName == name, "Repeated service configuration lost its identity.");
+    }
+});
+
+Run("service models preserve unknown native values", () =>
+{
+    var state = new ServiceStateInfo(uint.MaxValue, ServiceState.Unknown);
+    var startType = new ServiceStartTypeInfo(uint.MaxValue, ServiceStartType.Unknown);
+    var errorControl = new ServiceErrorControlInfo(uint.MaxValue, ServiceErrorControl.Unknown);
+    var type = new ServiceTypeInfo(uint.MaxValue, ServiceType.AllKnown);
+    Assert(state.RawValue == uint.MaxValue && startType.RawValue == uint.MaxValue && errorControl.RawValue == uint.MaxValue && type.HasUnknownBits, "Unknown service values lost their raw native representation.");
+});
+
+Run("service enumeration rejects malformed native buffers", () =>
+{
+    var parser = typeof(ServiceInspector).GetMethod("ParseEnumerationPage", BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new InvalidOperationException("The internal service enumeration parser was unavailable.");
+    try
+    {
+        _ = parser.Invoke(null, new object[] { new byte[1], 1U });
+        throw new InvalidOperationException("A truncated service buffer unexpectedly parsed.");
+    }
+    catch (TargetInvocationException exception) when (exception.InnerException is ServiceInspectionException serviceException)
+    {
+        Assert(serviceException.NativeErrorCode == 87, "Malformed service data did not preserve ERROR_INVALID_PARAMETER.");
     }
 });
 
@@ -1059,6 +1132,24 @@ static void Assert(bool condition, string message)
     {
         throw new InvalidOperationException(message);
     }
+}
+
+static ServiceConfigurationInfo FindReadableServiceConfiguration(ServiceInspector inspector)
+{
+    ServiceInspectionException? lastFailure = null;
+    foreach (var service in inspector.EnumerateServices())
+    {
+        try
+        {
+            return inspector.InspectConfiguration(service.Name);
+        }
+        catch (ServiceInspectionException exception)
+        {
+            lastFailure = exception;
+        }
+    }
+
+    throw new InvalidOperationException($"No enumerated service accepted SERVICE_QUERY_CONFIG. Last error: {lastFailure?.NativeErrorCode}.");
 }
 
 static void AssertCollectionSnapshot<T>(IReadOnlyList<T> values, string description)
