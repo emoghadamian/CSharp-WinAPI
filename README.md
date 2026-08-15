@@ -79,6 +79,12 @@ Implemented read-only local service inventory and configuration inspection throu
 
 See [Windows service inspection](docs/services.md).
 
+## Windows Event Log APIs
+
+Implemented read-only local channel enumeration and bounded XPath inspection through `EvtOpenChannelEnum`, `EvtNextChannelPath`, `EvtQuery`, `EvtNext`, `EvtRender`, and SafeHandle-owned `EvtClose`. Rendered XML is preserved; clearing, writing, exporting, and subscriptions are out of scope.
+
+See [Windows Event Log inspection](docs/event-log.md).
+
 ## 🧱 PE Image APIs
 
 Implemented read-only on-disk PE inspection for validated PE32 and PE32+ headers, sections, data directories, and RVA-to-file-offset mapping. The parser does not load, execute, or modify images.
@@ -149,6 +155,7 @@ examples/pe/                       executable-image inspection examples
 examples/tokens/                   access-token inspection examples
 examples/registry/                 registry security inspection examples
 examples/services/                 Windows service inspection examples
+examples/events/                   Windows Event Log inspection examples
 tests/CSharp.WinAPI.Tests/         dependency-free executable integration tests
 docs/                              interop guidance, security notes, and roadmap
 ```
@@ -183,6 +190,7 @@ dotnet run --project tests/CSharp.WinAPI.Tests --configuration Debug
 8. `examples/pe/PeInspection` — PE headers, sections, directories, and RVA mapping.
 9. `examples/registry/RegistrySecurityInspection` — `READ_CONTROL`, caller-owned descriptors, DACLs, ACEs, and registry views.
 10. `examples/services/ServiceInspection` â€” SCM enumeration, configuration buffers, and service/process correlation.
+11. `examples/events/EventLogInspection` — bounded local Event Log enumeration, query, and XML rendering.
 11. See the [full roadmap](docs/roadmap.md).
 
 ## ⚠️ Privileges & Windows Version Considerations
@@ -224,6 +232,7 @@ The module targets Windows and uses Unicode Netapi32 APIs available since Window
 | Registry effective access | `AccessCheck` with current-token bridge and registry `GENERIC_MAPPING` | Yes | Yes | Yes |
 | Services | `OpenSCManagerW`, `EnumServicesStatusExW`, and `SERVICE_STATUS_PROCESS` | Yes | Yes | Yes |
 | Services | `OpenServiceW`, `QueryServiceConfigW`, and `CloseServiceHandle` SafeHandle ownership | Yes | Yes | Yes |
+| Event logs | `EvtOpenChannelEnum`, `EvtNextChannelPath`, `EvtQuery`, `EvtNext`, `EvtRender`, and `EvtClose` | Yes | Yes | Yes |
 
 ## 🤝 Contributing
 

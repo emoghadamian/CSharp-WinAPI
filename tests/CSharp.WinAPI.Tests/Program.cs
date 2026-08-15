@@ -8,6 +8,7 @@ using CSharp.WinAPI.Tokens;
 using CSharp.WinAPI.Security;
 using CSharp.WinAPI.Registry;
 using CSharp.WinAPI.Services;
+using CSharp.WinAPI.Events;
 using System.Buffers.Binary;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -515,6 +516,42 @@ Run("service dependency parser rejects unterminated MULTI_SZ data", () =>
     {
         pin.Free();
     }
+});
+
+var eventLogInspector = new EventLogInspector();
+
+Run("event log channels and records are immutable read-only snapshots", () =>
+{
+    var channels = eventLogInspector.EnumerateChannels();
+    Assert(channels.Count > 0 && channels.Contains("System", StringComparer.OrdinalIgnoreCase), "The local System Event Log channel was unavailable.");
+    AssertCollectionSnapshot(channels, "event log channels");
+    var records = eventLogInspector.Query("System", "*", 1);
+    Assert(records.Count > 0 && records[0].Xml.Contains("<Event", StringComparison.Ordinal), "The System query did not render event XML.");
+    AssertCollectionSnapshot(records, "event log records");
+});
+
+Run("event log query validates bounds and preserves native query errors", () =>
+{
+    AssertThrows<ArgumentOutOfRangeException>(() => eventLogInspector.Query("System", "*", 0), "A zero event maximum was accepted.");
+    AssertThrows<ArgumentOutOfRangeException>(() => eventLogInspector.Query("System", "*", 4_097), "An excessive event maximum was accepted.");
+    try { _ = eventLogInspector.Query("System", "[System", 1); throw new InvalidOperationException("Malformed XPath unexpectedly succeeded."); }
+    catch (EventLogInspectionException exception) { Assert(exception.Operation == "EvtQuery" && exception.NativeErrorCode is not null, "The native XPath error was not preserved."); }
+});
+
+Run("event log XML parsing is namespace-aware bounded and secure", () =>
+{
+    const string xml = "<Event xmlns=\"http://schemas.microsoft.com/win/2004/08/events/event\"><System><Provider Name=\"Fixture\"/><EventID>42</EventID><EventRecordID>9</EventRecordID><Channel>System</Channel></System><EventData><Data Name=\"x\">one</Data><Data Name=\"x\">two</Data></EventData></Event>";
+    var parser = typeof(EventLogInspector).Assembly.GetType("CSharp.WinAPI.Events.EventLogXmlParser")?.GetMethods(BindingFlags.NonPublic | BindingFlags.Static).Single(method => method.Name == "Parse" && method.GetParameters().Length == 2) ?? throw new InvalidOperationException("Event XML parser unavailable.");
+    var record = (EventLogRecord)(parser.Invoke(null, new object?[] { xml, "System" }) ?? throw new InvalidOperationException("Event parser returned null."));
+    Assert(record.ProviderName == "Fixture" && record.EventId == 42 && record.RecordId == 9 && record.EventData.Count == 2 && record.EventData[1].Value == "two", "Stable XML metadata did not parse.");
+    AssertCollectionSnapshot(record.EventData, "event data");
+    try { _ = parser.Invoke(null, new object?[] { "<!DOCTYPE Event [<!ENTITY x SYSTEM 'file:///never-read'>]><Event xmlns=\"http://schemas.microsoft.com/win/2004/08/events/event\"><System/></Event>", "System" }); throw new InvalidOperationException("DTD XML unexpectedly parsed."); }
+    catch (TargetInvocationException exception) when (exception.InnerException is EventLogInspectionException inspection) { Assert(inspection.NativeErrorCode is null, "Managed XML parsing fabricated a native error."); }
+});
+
+Run("event log handles are released across repeated enumeration query and render", () =>
+{
+    for (var iteration = 0; iteration < 100; iteration++) { Assert(eventLogInspector.EnumerateChannels().Count > 0, "Repeated channel enumeration failed."); Assert(eventLogInspector.Query("System", "*", 1).Single().Xml.Length > 0, "Repeated query/render failed."); }
 });
 
 var threadInspector = new ThreadInspector();
@@ -1180,6 +1217,13 @@ static void Assert(bool condition, string message)
     {
         throw new InvalidOperationException(message);
     }
+}
+
+static void AssertThrows<TException>(Action action, string message)
+    where TException : Exception
+{
+    try { action(); throw new InvalidOperationException(message); }
+    catch (TException) { }
 }
 
 static ServiceConfigurationInfo FindReadableServiceConfiguration(ServiceInspector inspector)

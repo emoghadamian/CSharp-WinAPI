@@ -21,6 +21,7 @@
 - Registry Security Descriptor / ACL inspection — COMPLETE
 - Registry AccessCheck / Effective Access Evaluation — COMPLETE
 - service inspection â€” COMPLETE
+- Windows Event Log inspection — COMPLETE (subscriptions, forwarding, publishing, and log management remain deferred)
 
 ## Advanced
 
