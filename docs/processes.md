@@ -63,6 +63,8 @@ Diagnostics add detail without changing existing process enumeration, optional r
 
 `PROCESSENTRY32W` contains a pointer-sized `ULONG_PTR`, represented as `nuint`; its native layout therefore remains correct for x86 and x64. `IsWow64Process2` distinguishes the target process architecture from the native operating-system architecture. `QueryFullProcessImageNameW` is also suitable for retrieving image names across 32-bit/64-bit boundaries.
 
+Cross-target compilation does not substitute for runtime validation. Run the inspector on the Windows architecture and process bitness that match the investigation scenario before relying on observed cross-bitness behavior.
+
 ## Raw interop learning example
 
 `examples/processes/ProcessEnumeration` demonstrates `ProcessInspector` and includes a deliberately small raw `LibraryImport` call to `QueryFullProcessImageNameW` for the current-process pseudo-handle. The pseudo-handle must not be closed; unlike it, every real snapshot or process handle in the reusable library is owned by a SafeHandle.

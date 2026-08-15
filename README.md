@@ -29,6 +29,10 @@ See [DllImport vs LibraryImport](docs/interop/dllimport-vs-libraryimport.md).
 
 `src/CSharp.WinAPI/Interop` contains raw declarations only. Managed logic lives separately in feature-focused namespaces; no application flow is embedded in native declarations.
 
+## Architecture support and validation
+
+The projects are AnyCPU and do not pin a runtime identifier. Interop models use pointer-sized managed types only for native pointer-sized fields, while PE parsing uses the widths defined by the file format. The solution is compiled with x64, x86, and ARM64 `PlatformTarget` settings. That is compile-time evidence only: runtime behavior must be validated on a matching Windows host and caller bitness. Module and virtual-memory inspection retain the documented cross-bitness limits described in their feature documentation.
+
 ## ⚙️ Win32 APIs
 
 The first module uses `Netapi32.dll`:

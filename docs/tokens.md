@@ -23,8 +23,8 @@ Each variable-length token query uses the documented two-call `GetTokenInformati
 
 ## Primary and impersonation tokens
 
-Processes normally use **primary tokens**. **Impersonation tokens** represent a client security context on a thread or server operation and carry an impersonation level. This lab only identifies and reports those states; it never creates, duplicates, assigns, or impersonates a token.
+Processes normally use **primary tokens**. **Impersonation tokens** represent a client security context on a thread or server operation and carry an impersonation level. `TokenInspector` only identifies and reports those states; it never creates, assigns, or impersonates a token. The separate AccessCheck laboratories internally duplicate the current process primary token only when the native `AccessCheck` contract requires an impersonation token; that SafeHandle-owned token is supplied only to that call and immediately disposed.
 
 ## Scope and limitations
 
-The example and library are inspection-only. They do not modify privileges, duplicate tokens, impersonate users, acquire credentials, or create processes under another token. Access checks are enforced by Windows, so a token for another process can legitimately fail with access denied. Account and privilege-name resolution can also vary with local/domain configuration, while raw SIDs and LUIDs remain available.
+The example and library are inspection-only. They do not modify privileges, impersonate users, acquire credentials, or create processes under another token. The narrowly scoped internal duplication used by AccessCheck is not exposed through this API and is not available for any other operation. Access checks are enforced by Windows, so a token for another process can legitimately fail with access denied. Account and privilege-name resolution can also vary with local/domain configuration, while raw SIDs and LUIDs remain available.
