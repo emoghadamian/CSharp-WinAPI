@@ -13,6 +13,7 @@ using CSharp.WinAPI.Tasks;
 using CSharp.WinAPI.Handles;
 using CSharp.WinAPI.Wmi;
 using CSharp.WinAPI.Pipes;
+using CSharp.WinAPI.Etw;
 using System.Buffers.Binary;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -617,6 +618,44 @@ Run("named pipe inspection returns immutable local metadata", () =>
     Assert(pipes.Count>0 && pipes.All(pipe=>pipe.Name.Length>0&&pipe.Path.StartsWith("\\\\.\\pipe\\",StringComparison.Ordinal)),"Named-pipe enumeration returned invalid metadata.");
     AssertCollectionSnapshot(pipes,"named pipes");
     for(var iteration=0;iteration<100;iteration++)Assert(namedPipeInspector.EnumerateLocalPipes().Count>0,"Repeated named-pipe enumeration failed.");
+});
+
+Run("ETW provider metadata parser validates bounded immutable snapshots", () =>
+{
+    var providerId = Guid.Parse("f4f6c9e3-5a3e-4c99-a2d9-df7db1de4c41");
+    var fixture = BuildEtwProviderFixture((providerId, "Microsoft-Windows-Test", 0u), (Guid.Parse("5f322a1d-12f6-4541-9b3c-47ac1a56405c"), "Future-Provider", 99u));
+    var providers = EtwProviderMetadataParser.Parse(fixture, (uint)fixture.Length);
+    Assert(providers.Count == 2 && providers[0].ProviderId == providerId && providers[0].Name == "Microsoft-Windows-Test", "The deterministic ETW provider fixture was not parsed correctly.");
+    Assert(providers[0].SchemaSource == EtwProviderSchemaSource.Manifest && providers[1].SchemaSource is null && providers[1].RawSchemaSource == 99, "ETW schema-source values were not preserved safely.");
+    AssertCollectionSnapshot(providers, "ETW providers");
+    var filtered = EtwProviderInspector.FilterByNamePrefix(providers, "microsoft-");
+    Assert(filtered.Count == 1 && filtered[0] == providers[0], "ETW managed provider-prefix filtering was incorrect.");
+    AssertCollectionSnapshot(filtered, "filtered ETW providers");
+    Assert(EtwProviderMetadataParser.Parse(new byte[8], 8).Count == 0, "An empty ETW provider fixture was not represented as an empty snapshot.");
+
+    var excessiveCount = new byte[8];
+    BinaryPrimitives.WriteUInt32LittleEndian(excessiveCount, (uint)EtwProviderMetadataParser.MaximumProviderCount + 1);
+    AssertThrows<EtwProviderInspectionException>(() => EtwProviderMetadataParser.Parse(excessiveCount, (uint)excessiveCount.Length), "An excessive ETW provider count was accepted.");
+    AssertThrows<EtwProviderInspectionException>(() => EtwProviderMetadataParser.ValidateBufferLength((uint)EtwProviderMetadataParser.MaximumMetadataBufferLength + 1), "An excessive ETW metadata buffer was accepted.");
+    AssertThrows<EtwProviderInspectionException>(() => EtwProviderMetadataParser.Parse(new byte[8], 7), "A truncated ETW provider header was accepted.");
+
+    var invalidOffset = (byte[])fixture.Clone();
+    BinaryPrimitives.WriteUInt32LittleEndian(invalidOffset.AsSpan(28, 4), (uint)invalidOffset.Length + 2);
+    AssertThrows<EtwProviderInspectionException>(() => EtwProviderMetadataParser.Parse(invalidOffset, (uint)invalidOffset.Length), "An out-of-buffer ETW provider-name offset was accepted.");
+
+    var unterminated = BuildUnterminatedEtwProviderFixture(providerId);
+    AssertThrows<EtwProviderInspectionException>(() => EtwProviderMetadataParser.Parse(unterminated, (uint)unterminated.Length), "An unterminated ETW provider name was accepted.");
+});
+
+var etwProviderInspector = new EtwProviderInspector();
+Run("ETW provider inspection returns bounded immutable local metadata", () =>
+{
+    var providers = etwProviderInspector.EnumerateProviders();
+    Assert(providers.Count > 0 && providers.All(provider => provider.Name.Length > 0), "ETW provider enumeration returned invalid metadata.");
+    AssertCollectionSnapshot(providers, "ETW provider enumeration");
+    AssertThrows<ArgumentException>(() => etwProviderInspector.FindProvidersByNamePrefix(""), "An empty ETW provider prefix was accepted.");
+    AssertThrows<ArgumentException>(() => etwProviderInspector.FindProvidersByNamePrefix("ETW\0hidden"), "A null-containing ETW provider prefix was accepted.");
+    for (var iteration = 0; iteration < 100; iteration++) Assert(etwProviderInspector.EnumerateProviders().Count > 0, "Repeated ETW provider enumeration failed.");
 });
 
 Run("scheduled task inspection validates paths and repeated COM lifetimes", () =>
@@ -1331,6 +1370,47 @@ static void AssertCollectionSnapshot<T>(IReadOnlyList<T> values, string descript
     catch (NotSupportedException)
     {
     }
+}
+
+static byte[] BuildEtwProviderFixture(params (Guid ProviderId, string Name, uint SchemaSource)[] providers)
+{
+    const int headerLength = 8;
+    const int providerInfoLength = 24;
+    var stringLength = providers.Sum(provider => checked((provider.Name.Length + 1) * sizeof(char)));
+    var buffer = new byte[checked(headerLength + providers.Length * providerInfoLength + stringLength)];
+    BinaryPrimitives.WriteUInt32LittleEndian(buffer, checked((uint)providers.Length));
+    var stringOffset = headerLength + providers.Length * providerInfoLength;
+    for (var index = 0; index < providers.Length; index++)
+    {
+        var provider = providers[index];
+        var entryOffset = headerLength + index * providerInfoLength;
+        provider.ProviderId.TryWriteBytes(buffer.AsSpan(entryOffset, 16));
+        BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(entryOffset + 16, 4), provider.SchemaSource);
+        BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(entryOffset + 20, 4), checked((uint)stringOffset));
+        foreach (var character in provider.Name)
+        {
+            BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(stringOffset, sizeof(char)), character);
+            stringOffset += sizeof(char);
+        }
+
+        stringOffset += sizeof(char);
+    }
+
+    return buffer;
+}
+
+static byte[] BuildUnterminatedEtwProviderFixture(Guid providerId)
+{
+    const int headerLength = 8;
+    const int providerInfoLength = 24;
+    var buffer = new byte[headerLength + providerInfoLength + EtwProviderMetadataParser.MaximumProviderNameLength * sizeof(char)];
+    BinaryPrimitives.WriteUInt32LittleEndian(buffer, 1);
+    providerId.TryWriteBytes(buffer.AsSpan(headerLength, 16));
+    BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(headerLength + 20, 4), headerLength + providerInfoLength);
+    for (var index = headerLength + providerInfoLength; index < buffer.Length; index += sizeof(char))
+        BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(index, sizeof(char)), 'A');
+
+    return buffer;
 }
 
 static void WithPeFixture(bool pe32Plus, Action<string> test, bool includeImports = false)

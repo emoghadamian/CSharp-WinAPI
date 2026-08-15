@@ -109,6 +109,12 @@ Implemented bounded local named-pipe name inventory through `FindFirstFileW`, `F
 
 See [Named Pipe inspection](docs/named-pipes.md).
 
+## ETW Provider APIs
+
+Implemented bounded, local ETW provider-registration metadata inventory through `TdhEnumerateProviders`. It reads provider GUIDs, names, and raw schema-source values without starting a trace, enabling a provider, or collecting events.
+
+See [ETW provider metadata inspection](docs/etw.md).
+
 ## 🧱 PE Image APIs
 
 Implemented read-only on-disk PE inspection for validated PE32 and PE32+ headers, sections, data directories, and RVA-to-file-offset mapping. The parser does not load, execute, or modify images.
@@ -184,6 +190,7 @@ examples/tasks/                    Scheduled Task inspection examples
 examples/handles/                  Windows Handle inspection examples
 examples/wmi/                      WMI / CIM inspection examples
 examples/pipes/                    Named Pipe inspection examples
+examples/etw/                      ETW provider inspection examples
 tests/CSharp.WinAPI.Tests/         dependency-free executable integration tests
 docs/                              interop guidance, security notes, and roadmap
 ```
@@ -223,6 +230,7 @@ dotnet run --project tests/CSharp.WinAPI.Tests --configuration Debug
 13. `examples/handles/HandleInspection` — bounded system handle metadata inventory.
 14. `examples/wmi/WmiInspection` — bounded local WMI class and instance inspection.
 15. `examples/pipes/NamedPipeInspection` — metadata-only local named-pipe inventory.
+16. `examples/etw/EtwProviderInspection` — metadata-only local ETW provider inventory.
 
 See the [full roadmap](docs/roadmap.md).
 
@@ -270,6 +278,7 @@ The module targets Windows and uses Unicode Netapi32 APIs available since Window
 | Handles | `NtQuerySystemInformation(SystemExtendedHandleInformation)` metadata inventory | Yes | Yes | Yes |
 | WMI/CIM | Local `System.Management` class metadata and instance inspection | Yes | Yes | Yes |
 | Named pipes | `FindFirstFileW`, `FindNextFileW`, and `FindClose` local inventory | Yes | Yes | Yes |
+| ETW providers | `TdhEnumerateProviders` local registration metadata | Yes | Yes | Yes |
 
 ## 🤝 Contributing
 

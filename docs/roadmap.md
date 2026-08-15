@@ -26,6 +26,7 @@
 - Windows Handle inspection — COMPLETE (object-name/type resolution and handle manipulation remain deferred)
 - Windows WMI / CIM inspection — COMPLETE (method invocation, subscriptions, persistence, and remote access remain deferred)
 - Named Pipe inspection — COMPLETE (pipe connection, payload inspection, security, and ownership resolution remain deferred)
+- ETW Provider metadata inspection — COMPLETE (trace sessions, provider activation, event collection, payload decoding, and provider-field queries remain deferred)
 
 ## Advanced
 
