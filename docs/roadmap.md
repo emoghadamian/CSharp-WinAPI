@@ -25,6 +25,7 @@
 - Windows Scheduled Task inspection — COMPLETE (registration, execution, and task management remain deferred)
 - Windows Handle inspection — COMPLETE (object-name/type resolution and handle manipulation remain deferred)
 - Windows WMI / CIM inspection — COMPLETE (method invocation, subscriptions, persistence, and remote access remain deferred)
+- Named Pipe inspection — COMPLETE (pipe connection, payload inspection, security, and ownership resolution remain deferred)
 
 ## Advanced
 

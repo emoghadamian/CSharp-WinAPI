@@ -12,6 +12,7 @@ using CSharp.WinAPI.Events;
 using CSharp.WinAPI.Tasks;
 using CSharp.WinAPI.Handles;
 using CSharp.WinAPI.Wmi;
+using CSharp.WinAPI.Pipes;
 using System.Buffers.Binary;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -598,6 +599,24 @@ Run("WMI inspection validates local namespaces and reads bounded metadata", () =
     AssertThrows<ArgumentException>(() => wmiInspector.QueryInstances(new WmiNamespacePath("\\remote\\ROOT\\CIMV2"), "Win32_OperatingSystem"), "A remote WMI namespace was accepted.");
     AssertThrows<ArgumentException>(() => wmiInspector.QueryInstances(new WmiNamespacePath("ROOT\\CIMV2\0bad"), "Win32_OperatingSystem"), "A null-containing WMI namespace was accepted.");
     AssertThrows<ArgumentException>(() => wmiInspector.QueryInstances(root, "Win32_Service;DELETE"), "A non-identifier WMI class name was accepted.");
+});
+
+var namedPipeInspector = new NamedPipeInspector();
+Run("named pipe parsing rejects malformed fixed native buffers", () =>
+{
+    var valid = new string('p', NamedPipeEntryParser.MaximumNameLength) + '\0';
+    Assert(NamedPipeEntryParser.Parse(valid) == new string('p', NamedPipeEntryParser.MaximumNameLength), "A maximum-length pipe name was not preserved.");
+    AssertThrows<NamedPipeInspectionException>(() => NamedPipeEntryParser.Parse("\0" + new string('\0', NamedPipeEntryParser.MaximumNameLength - 1)), "An empty pipe name was accepted.");
+    AssertThrows<NamedPipeInspectionException>(() => NamedPipeEntryParser.Parse(new string('p', NamedPipeEntryParser.NativeBufferLength)), "An unterminated pipe name was accepted.");
+    AssertThrows<NamedPipeInspectionException>(() => NamedPipeEntryParser.Parse("pipe\0"), "A truncated native pipe-name buffer was accepted.");
+});
+
+Run("named pipe inspection returns immutable local metadata", () =>
+{
+    var pipes=namedPipeInspector.EnumerateLocalPipes();
+    Assert(pipes.Count>0 && pipes.All(pipe=>pipe.Name.Length>0&&pipe.Path.StartsWith("\\\\.\\pipe\\",StringComparison.Ordinal)),"Named-pipe enumeration returned invalid metadata.");
+    AssertCollectionSnapshot(pipes,"named pipes");
+    for(var iteration=0;iteration<100;iteration++)Assert(namedPipeInspector.EnumerateLocalPipes().Count>0,"Repeated named-pipe enumeration failed.");
 });
 
 Run("scheduled task inspection validates paths and repeated COM lifetimes", () =>
