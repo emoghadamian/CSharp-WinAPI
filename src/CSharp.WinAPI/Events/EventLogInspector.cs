@@ -5,7 +5,7 @@ namespace CSharp.WinAPI.Events;
 /// <summary>Provides bounded, read-only local Windows Event Log channel enumeration and event querying.</summary>
 public sealed class EventLogInspector
 {
-    private const int InsufficientBuffer = 122, NoMoreItems = 259, MaximumChannels = 4_096, MaximumChannelChars = 32_768, MaximumEvents = 4_096, MaximumXmlBytes = 1_048_576;
+    private const int InsufficientBuffer = 122, NoMoreItems = 259, MaximumChannels = 4_096, MaximumChannelChars = 32_768, MaximumXPathCharacters = 16_384, MaximumEvents = 4_096, MaximumXmlBytes = 1_048_576;
     private const uint QueryChannel = 1, QueryForward = 0x100, QueryReverse = 0x200, RenderXml = 1;
     internal const int MaximumRenderedXmlCharacters = MaximumXmlBytes / sizeof(char);
     /// <summary>Enumerates registered local Event Log channel names as an immutable snapshot.</summary>
@@ -20,6 +20,8 @@ public sealed class EventLogInspector
     public IReadOnlyList<EventLogRecord> Query(string channelPath, string xpath, int maxEvents, EventLogQueryDirection direction = EventLogQueryDirection.Reverse)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(channelPath); ArgumentException.ThrowIfNullOrWhiteSpace(xpath);
+        if (channelPath.Length > MaximumChannelChars || channelPath.IndexOf('\0') >= 0) throw new ArgumentException($"The channel path must not exceed {MaximumChannelChars} characters or contain a null character.", nameof(channelPath));
+        if (xpath.Length > MaximumXPathCharacters || xpath.IndexOf('\0') >= 0) throw new ArgumentException($"The XPath must not exceed {MaximumXPathCharacters} characters or contain a null character.", nameof(xpath));
         if (maxEvents is < 1 or > MaximumEvents) throw new ArgumentOutOfRangeException(nameof(maxEvents), $"The maximum must be from 1 through {MaximumEvents}.");
         if (direction is not EventLogQueryDirection.Forward and not EventLogQueryDirection.Reverse) throw new ArgumentOutOfRangeException(nameof(direction));
         using var query = new SafeEventHandle(EventLogNative.EvtQuery(nint.Zero, channelPath, xpath, QueryChannel | (direction == EventLogQueryDirection.Forward ? QueryForward : QueryReverse)));

@@ -534,6 +534,10 @@ Run("event log query validates bounds and preserves native query errors", () =>
 {
     AssertThrows<ArgumentOutOfRangeException>(() => eventLogInspector.Query("System", "*", 0), "A zero event maximum was accepted.");
     AssertThrows<ArgumentOutOfRangeException>(() => eventLogInspector.Query("System", "*", 4_097), "An excessive event maximum was accepted.");
+    AssertThrows<ArgumentException>(() => eventLogInspector.Query(new string('C', 32_769), "*", 1), "An oversized channel path was accepted.");
+    AssertThrows<ArgumentException>(() => eventLogInspector.Query("System", new string('*', 16_385), 1), "An oversized XPath was accepted.");
+    AssertThrows<ArgumentException>(() => eventLogInspector.Query("System\0hidden", "*", 1), "A null-terminated channel path was accepted.");
+    AssertThrows<ArgumentException>(() => eventLogInspector.Query("System", "*\0hidden", 1), "A null-terminated XPath was accepted.");
     try { _ = eventLogInspector.Query("System", "[System", 1); throw new InvalidOperationException("Malformed XPath unexpectedly succeeded."); }
     catch (EventLogInspectionException exception) { Assert(exception.Operation == "EvtQuery" && exception.NativeErrorCode is not null, "The native XPath error was not preserved."); }
 });
@@ -547,6 +551,8 @@ Run("event log XML parsing is namespace-aware bounded and secure", () =>
     AssertCollectionSnapshot(record.EventData, "event data");
     try { _ = parser.Invoke(null, new object?[] { "<!DOCTYPE Event [<!ENTITY x SYSTEM 'file:///never-read'>]><Event xmlns=\"http://schemas.microsoft.com/win/2004/08/events/event\"><System/></Event>", "System" }); throw new InvalidOperationException("DTD XML unexpectedly parsed."); }
     catch (TargetInvocationException exception) when (exception.InnerException is EventLogInspectionException inspection) { Assert(inspection.NativeErrorCode is null, "Managed XML parsing fabricated a native error."); }
+    try { _ = parser.Invoke(null, new object?[] { $"<Event xmlns=\"http://schemas.microsoft.com/win/2004/08/events/event\"><System/></Event>{new string(' ', 524_289)}", "System" }); throw new InvalidOperationException("Oversized XML unexpectedly parsed."); }
+    catch (TargetInvocationException exception) when (exception.InnerException is EventLogInspectionException inspection) { Assert(inspection.NativeErrorCode is null, "Oversized XML fabricated a native error."); }
 });
 
 Run("event log handles are released across repeated enumeration query and render", () =>
