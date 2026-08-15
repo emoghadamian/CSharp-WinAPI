@@ -11,6 +11,7 @@ using CSharp.WinAPI.Services;
 using CSharp.WinAPI.Events;
 using CSharp.WinAPI.Tasks;
 using CSharp.WinAPI.Handles;
+using CSharp.WinAPI.Wmi;
 using System.Buffers.Binary;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -584,6 +585,19 @@ Run("system handle inspection returns immutable current-process metadata", () =>
     var current = HandleInspector.FilterByProcess(snapshot, (uint)Environment.ProcessId);
     Assert(current.Count > 0 && current.All(handle => handle.ProcessId == (uint)Environment.ProcessId), "Current-process handle filtering was incorrect.");
     AssertCollectionSnapshot(current, "filtered system handles");
+});
+
+var wmiInspector = new WmiInspector();
+Run("WMI inspection validates local namespaces and reads bounded metadata", () =>
+{
+    var root = new WmiNamespacePath("ROOT\\CIMV2");
+    var operatingSystem = wmiInspector.QueryInstances(root, "Win32_OperatingSystem", 1);
+    Assert(operatingSystem.Count > 0 && operatingSystem[0].Properties.Count > 0, "WMI did not return operating-system metadata.");
+    AssertCollectionSnapshot(operatingSystem, "WMI instances");
+    AssertCollectionSnapshot(operatingSystem[0].Properties, "WMI properties");
+    AssertThrows<ArgumentException>(() => wmiInspector.QueryInstances(new WmiNamespacePath("\\remote\\ROOT\\CIMV2"), "Win32_OperatingSystem"), "A remote WMI namespace was accepted.");
+    AssertThrows<ArgumentException>(() => wmiInspector.QueryInstances(new WmiNamespacePath("ROOT\\CIMV2\0bad"), "Win32_OperatingSystem"), "A null-containing WMI namespace was accepted.");
+    AssertThrows<ArgumentException>(() => wmiInspector.QueryInstances(root, "Win32_Service;DELETE"), "A non-identifier WMI class name was accepted.");
 });
 
 Run("scheduled task inspection validates paths and repeated COM lifetimes", () =>

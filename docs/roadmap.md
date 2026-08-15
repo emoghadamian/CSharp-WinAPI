@@ -24,6 +24,7 @@
 - Windows Event Log inspection — COMPLETE (subscriptions, forwarding, publishing, and log management remain deferred)
 - Windows Scheduled Task inspection — COMPLETE (registration, execution, and task management remain deferred)
 - Windows Handle inspection — COMPLETE (object-name/type resolution and handle manipulation remain deferred)
+- Windows WMI / CIM inspection — COMPLETE (method invocation, subscriptions, persistence, and remote access remain deferred)
 
 ## Advanced
 

@@ -97,6 +97,12 @@ Implemented metadata-only system handle inventory through the internal NT `Syste
 
 See [Windows Handle inspection](docs/handles.md).
 
+## WMI / CIM APIs
+
+Implemented bounded, local-only WMI class and instance metadata inspection through `System.Management`. It does not invoke WMI methods, create subscriptions, use remote endpoints, or modify WMI state.
+
+See [WMI / CIM inspection](docs/wmi.md).
+
 ## 🧱 PE Image APIs
 
 Implemented read-only on-disk PE inspection for validated PE32 and PE32+ headers, sections, data directories, and RVA-to-file-offset mapping. The parser does not load, execute, or modify images.
@@ -170,6 +176,7 @@ examples/services/                 Windows service inspection examples
 examples/events/                   Windows Event Log inspection examples
 examples/tasks/                    Scheduled Task inspection examples
 examples/handles/                  Windows Handle inspection examples
+examples/wmi/                      WMI / CIM inspection examples
 tests/CSharp.WinAPI.Tests/         dependency-free executable integration tests
 docs/                              interop guidance, security notes, and roadmap
 ```
@@ -207,6 +214,7 @@ dotnet run --project tests/CSharp.WinAPI.Tests --configuration Debug
 11. `examples/events/EventLogInspection` — bounded local Event Log enumeration, query, and XML rendering.
 12. `examples/tasks/ScheduledTaskInspection` — bounded local Task Scheduler metadata inspection.
 13. `examples/handles/HandleInspection` — bounded system handle metadata inventory.
+14. `examples/wmi/WmiInspection` — bounded local WMI class and instance inspection.
 11. See the [full roadmap](docs/roadmap.md).
 
 ## ⚠️ Privileges & Windows Version Considerations
@@ -251,6 +259,7 @@ The module targets Windows and uses Unicode Netapi32 APIs available since Window
 | Event logs | `EvtOpenChannelEnum`, `EvtNextChannelPath`, `EvtQuery`, `EvtNext`, `EvtRender`, and `EvtClose` | Yes | Yes | Yes |
 | Scheduled tasks | Local Task Scheduler 2.0 COM enumeration and definition metadata | Yes | Yes | Yes |
 | Handles | `NtQuerySystemInformation(SystemExtendedHandleInformation)` metadata inventory | Yes | Yes | Yes |
+| WMI/CIM | Local `System.Management` class metadata and instance inspection | Yes | Yes | Yes |
 
 ## 🤝 Contributing
 
