@@ -10,6 +10,7 @@ using CSharp.WinAPI.Registry;
 using CSharp.WinAPI.Services;
 using CSharp.WinAPI.Events;
 using CSharp.WinAPI.Tasks;
+using CSharp.WinAPI.Handles;
 using System.Buffers.Binary;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -572,6 +573,17 @@ Run("scheduled task inspection returns bounded immutable local metadata", () =>
     if (taskWithAction is not null) AssertCollectionSnapshot(taskWithAction.Actions, "scheduled task actions");
     var taskWithTrigger = tasks.FirstOrDefault(task => task.Triggers.Count > 0);
     if (taskWithTrigger is not null) AssertCollectionSnapshot(taskWithTrigger.Triggers, "scheduled task triggers");
+});
+
+var handleInspector = new HandleInspector();
+Run("system handle inspection returns immutable current-process metadata", () =>
+{
+    var snapshot = handleInspector.Inspect();
+    Assert(snapshot.Handles.Count > 0, "System handle enumeration returned no entries.");
+    AssertCollectionSnapshot(snapshot.Handles, "system handles");
+    var current = HandleInspector.FilterByProcess(snapshot, (uint)Environment.ProcessId);
+    Assert(current.Count > 0 && current.All(handle => handle.ProcessId == (uint)Environment.ProcessId), "Current-process handle filtering was incorrect.");
+    AssertCollectionSnapshot(current, "filtered system handles");
 });
 
 Run("scheduled task inspection validates paths and repeated COM lifetimes", () =>

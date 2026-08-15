@@ -91,6 +91,12 @@ Implemented read-only local Task Scheduler metadata inspection through its docum
 
 See [Scheduled Task inspection](docs/scheduled-tasks.md).
 
+## Windows Handle APIs
+
+Implemented metadata-only system handle inventory through the internal NT `SystemExtendedHandleInformation` contract. It reports bounded PID/handle/type/access metadata without duplicating, closing, reading, or modifying handles.
+
+See [Windows Handle inspection](docs/handles.md).
+
 ## 🧱 PE Image APIs
 
 Implemented read-only on-disk PE inspection for validated PE32 and PE32+ headers, sections, data directories, and RVA-to-file-offset mapping. The parser does not load, execute, or modify images.
@@ -163,6 +169,7 @@ examples/registry/                 registry security inspection examples
 examples/services/                 Windows service inspection examples
 examples/events/                   Windows Event Log inspection examples
 examples/tasks/                    Scheduled Task inspection examples
+examples/handles/                  Windows Handle inspection examples
 tests/CSharp.WinAPI.Tests/         dependency-free executable integration tests
 docs/                              interop guidance, security notes, and roadmap
 ```
@@ -199,6 +206,7 @@ dotnet run --project tests/CSharp.WinAPI.Tests --configuration Debug
 10. `examples/services/ServiceInspection` â€” SCM enumeration, configuration buffers, and service/process correlation.
 11. `examples/events/EventLogInspection` — bounded local Event Log enumeration, query, and XML rendering.
 12. `examples/tasks/ScheduledTaskInspection` — bounded local Task Scheduler metadata inspection.
+13. `examples/handles/HandleInspection` — bounded system handle metadata inventory.
 11. See the [full roadmap](docs/roadmap.md).
 
 ## ⚠️ Privileges & Windows Version Considerations
@@ -242,6 +250,7 @@ The module targets Windows and uses Unicode Netapi32 APIs available since Window
 | Services | `OpenServiceW`, `QueryServiceConfigW`, and `CloseServiceHandle` SafeHandle ownership | Yes | Yes | Yes |
 | Event logs | `EvtOpenChannelEnum`, `EvtNextChannelPath`, `EvtQuery`, `EvtNext`, `EvtRender`, and `EvtClose` | Yes | Yes | Yes |
 | Scheduled tasks | Local Task Scheduler 2.0 COM enumeration and definition metadata | Yes | Yes | Yes |
+| Handles | `NtQuerySystemInformation(SystemExtendedHandleInformation)` metadata inventory | Yes | Yes | Yes |
 
 ## 🤝 Contributing
 
