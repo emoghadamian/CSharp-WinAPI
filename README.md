@@ -154,7 +154,7 @@ dotnet run --project examples/security/LocalGroupInspection
 
 ## 🧪 Testing
 
-The test runner exercises local-group enumeration, member enumeration, and invalid-group native error handling without requiring Administrator privileges:
+The dependency-free integration runner exercises the read-only laboratories, including native-error preservation, immutable snapshots, repeated resource lifecycles, PE malformed-input fixtures, file and registry security descriptors, and current-token AccessCheck evaluation. It does not require Administrator privileges:
 
 ```powershell
 dotnet run --project tests/CSharp.WinAPI.Tests --configuration Debug

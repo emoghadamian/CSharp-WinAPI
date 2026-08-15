@@ -87,7 +87,8 @@ internal static class AccessCheckEvaluator
             throw new AccessCheckInspectionException("PRIVILEGE_SET", objectLabel, ErrorInvalidParameter);
         }
 
-        var count = BitConverter.ToUInt32(buffer, 0);
+        // PRIVILEGE_SET begins with a DWORD Control followed by DWORD PrivilegeCount.
+        var count = BitConverter.ToUInt32(buffer, sizeof(uint));
         var itemSize = Marshal.SizeOf<LuidAndAttributesNative>();
         if (count > 4096 || (ulong)HeaderSize + ((ulong)count * (uint)itemSize) > (uint)length)
         {

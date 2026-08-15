@@ -7,6 +7,8 @@ using CSharp.WinAPI.Threads;
 using CSharp.WinAPI.Tokens;
 using CSharp.WinAPI.Security;
 using CSharp.WinAPI.Registry;
+using System.Buffers.Binary;
+using System.Reflection;
 
 var FixedCms = Convert.FromBase64String("MIIExwYJKoZIhvcNAQcCoIIEuDCCBLQCAQExDTALBglghkgBZQMEAgEwEgYJKoZIhvcNAQcBoAUEAwECA6CCAw4wggMKMIIB8qADAgECAggdZs60nr5UFTANBgkqhkiG9w0BAQsFADBFMQswCQYDVQQGEwJVUzEWMBQGA1UEChMNQmx1ZVRlYW0gTGFiczEeMBwGA1UEAxMVQ1NoYXJwLVdpbkFQSSBGaXh0dXJlMB4XDTI0MDEwMTAwMDAwMFoXDTMwMDEwMTAwMDAwMFowRTELMAkGA1UEBhMCVVMxFjAUBgNVBAoTDUJsdWVUZWFtIExhYnMxHjAcBgNVBAMTFUNTaGFycC1XaW5BUEkgRml4dHVyZTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAOn7dkQvMA146Z5D97EEquUMv93h0bRqGSApRY34kRS7wC2K2vjIZ3rqKUnU8Z1l7g2uO+97HQvwIrMG8dSCfpVeIcgV108U03FQsx+qxSXbm9NaVDVa4tMf1ez96wbCC2sJyV0tzAurYKRTefBY4D/BgVJiUKpXYYxQmr3CZ+4mYUitBZOeAdPCtnEG8b/OP9XEfmlfHoi4nhMIfe82OyTtFHmERxxFcb/PmlaEgpwtxf4nw0UP2st/k1aIcQ7gQF0eBQIEt+X0qMvv4jWrOYs979cwGq90nqwva9DwrseCJxc019eTKeVaGkmqm+xdAdeTazAUa5kL1JDRuGphrp0CAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAMu/QKioJWUCEolVX6j/GqYx3P7o6tZ/HyixjVNN6qwkDZTg4Mlz9T9d6usTFFbCXLujMBJI4EFWvN4MoeJsYaSuhf8N1Ok+TkoypWrNn+TKLlkLAjIjUTX01PKWYfqB1F6f0f9KmjCykrhgNQUwcYyCnP38R0H26cGzNyRK5ph7XutM4fXpLGbOw8hjQ5nUdlFhChS+A7cw0KoV8ez5sjdRIvUBZNp6nxBvNJurreHaYlAvV/0Q78/x+FuT76Xv7Y6sdJZYxBcgGuMOxx9LVITRVQmcdDVz2+03UBM4dPLpad25qIQLs0NBOl2Du1vuo6+ECEml2abg5rvkdm9FmXzGCAXgwggF0AgEBMFEwRTELMAkGA1UEBhMCVVMxFjAUBgNVBAoTDUJsdWVUZWFtIExhYnMxHjAcBgNVBAMTFUNTaGFycC1XaW5BUEkgRml4dHVyZQIIHWbOtJ6+VBUwCwYJYIZIAWUDBAIBMAsGCSqGSIb3DQEBAQSCAQB2rWkuriJPPD/L+KNmdT5tRbMH8UcLMkxFZWfyadR2qK6BtQauZ/pBBj3VTuLyC1/RJGM6q5m7S1T6a6TOU06pzE7qHyu1NiaAyeOX8hJUdHR/L1UK/i9sKTb6f84o4mppe3CoLQSO1FGMJdHoqYGbSX+psX/8npyPdYfJZZQEkTlI7S32kNSBl878vV3OQO8TlEMolxTLN1KpZR00Qn6EDpuqhPckyS3Rcnw1FWao2C3Q0OUOzXgxU/H+dBKZJRfoBx0+fE8SsBb/FrW8/1PBiQr6W1R4jnMaYFvHnsEbL+1cdkpTK+TZNFaUiLd9r2HFGi6Mzi0lWimlcU+4VEC2");
 
@@ -203,6 +205,31 @@ Run("AccessCheck can be repeated without retaining duplicated tokens", () =>
     var path = Path.GetTempFileName();
     try { for (var iteration = 0; iteration < 100; iteration++) Assert(accessCheckInspector.EvaluatePathAccess(path, 1).IsGranted, "Repeated AccessCheck denied temporary-file read."); }
     finally { File.Delete(path); }
+});
+
+Run("AccessCheck parses PRIVILEGE_SET control and count fields correctly", () =>
+{
+    const int headerSize = 8;
+    const int luidAndAttributesSize = 12;
+    var buffer = new byte[headerSize + (2 * luidAndAttributesSize)];
+    BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(0), 1); // Control
+    BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(sizeof(uint)), 2); // PrivilegeCount
+    BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(headerSize), 0x11223344);
+    BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(headerSize + 8), 0x00000002);
+    BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(headerSize + luidAndAttributesSize), 0x55667788);
+    BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(headerSize + luidAndAttributesSize + 8), 0x00000003);
+
+    var evaluator = typeof(AccessCheckInspector).Assembly.GetType("CSharp.WinAPI.Security.AccessCheckEvaluator")
+        ?? throw new InvalidOperationException("The internal AccessCheck evaluator was unavailable.");
+    var parser = evaluator.GetMethod("ParsePrivileges", BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new InvalidOperationException("The internal PRIVILEGE_SET parser was unavailable.");
+    var privileges = (IReadOnlyList<PrivilegeUseInfo>)(parser.Invoke(null, new object[] { buffer, (uint)buffer.Length, "fixture" })
+        ?? throw new InvalidOperationException("The PRIVILEGE_SET parser returned null."));
+
+    Assert(privileges.Count == 2, "The PRIVILEGE_SET count was not read after its control field.");
+    Assert(privileges[0].Luid == 0x11223344 && privileges[0].Attributes == 2, "The first PRIVILEGE_SET item was parsed incorrectly.");
+    Assert(privileges[1].Luid == 0x55667788 && privileges[1].Attributes == 3, "The second PRIVILEGE_SET item was parsed incorrectly.");
+    AssertCollectionSnapshot(privileges, "parsed AccessCheck privileges");
 });
 
 var registrySecurityInspector = new RegistrySecurityInspector();
