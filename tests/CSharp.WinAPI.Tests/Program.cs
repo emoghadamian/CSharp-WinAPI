@@ -10,6 +10,7 @@ using CSharp.WinAPI.Registry;
 using CSharp.WinAPI.Services;
 using System.Buffers.Binary;
 using System.Reflection;
+using System.Runtime.InteropServices;
 
 var FixedCms = Convert.FromBase64String("MIIExwYJKoZIhvcNAQcCoIIEuDCCBLQCAQExDTALBglghkgBZQMEAgEwEgYJKoZIhvcNAQcBoAUEAwECA6CCAw4wggMKMIIB8qADAgECAggdZs60nr5UFTANBgkqhkiG9w0BAQsFADBFMQswCQYDVQQGEwJVUzEWMBQGA1UEChMNQmx1ZVRlYW0gTGFiczEeMBwGA1UEAxMVQ1NoYXJwLVdpbkFQSSBGaXh0dXJlMB4XDTI0MDEwMTAwMDAwMFoXDTMwMDEwMTAwMDAwMFowRTELMAkGA1UEBhMCVVMxFjAUBgNVBAoTDUJsdWVUZWFtIExhYnMxHjAcBgNVBAMTFUNTaGFycC1XaW5BUEkgRml4dHVyZTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAOn7dkQvMA146Z5D97EEquUMv93h0bRqGSApRY34kRS7wC2K2vjIZ3rqKUnU8Z1l7g2uO+97HQvwIrMG8dSCfpVeIcgV108U03FQsx+qxSXbm9NaVDVa4tMf1ez96wbCC2sJyV0tzAurYKRTefBY4D/BgVJiUKpXYYxQmr3CZ+4mYUitBZOeAdPCtnEG8b/OP9XEfmlfHoi4nhMIfe82OyTtFHmERxxFcb/PmlaEgpwtxf4nw0UP2st/k1aIcQ7gQF0eBQIEt+X0qMvv4jWrOYs979cwGq90nqwva9DwrseCJxc019eTKeVaGkmqm+xdAdeTazAUa5kL1JDRuGphrp0CAwEAATANBgkqhkiG9w0BAQsFAAOCAQEAMu/QKioJWUCEolVX6j/GqYx3P7o6tZ/HyixjVNN6qwkDZTg4Mlz9T9d6usTFFbCXLujMBJI4EFWvN4MoeJsYaSuhf8N1Ok+TkoypWrNn+TKLlkLAjIjUTX01PKWYfqB1F6f0f9KmjCykrhgNQUwcYyCnP38R0H26cGzNyRK5ph7XutM4fXpLGbOw8hjQ5nUdlFhChS+A7cw0KoV8ez5sjdRIvUBZNp6nxBvNJurreHaYlAvV/0Q78/x+FuT76Xv7Y6sdJZYxBcgGuMOxx9LVITRVQmcdDVz2+03UBM4dPLpad25qIQLs0NBOl2Du1vuo6+ECEml2abg5rvkdm9FmXzGCAXgwggF0AgEBMFEwRTELMAkGA1UEBhMCVVMxFjAUBgNVBAoTDUJsdWVUZWFtIExhYnMxHjAcBgNVBAMTFUNTaGFycC1XaW5BUEkgRml4dHVyZQIIHWbOtJ6+VBUwCwYJYIZIAWUDBAIBMAsGCSqGSIb3DQEBAQSCAQB2rWkuriJPPD/L+KNmdT5tRbMH8UcLMkxFZWfyadR2qK6BtQauZ/pBBj3VTuLyC1/RJGM6q5m7S1T6a6TOU06pzE7qHyu1NiaAyeOX8hJUdHR/L1UK/i9sKTb6f84o4mppe3CoLQSO1FGMJdHoqYGbSX+psX/8npyPdYfJZZQEkTlI7S32kNSBl878vV3OQO8TlEMolxTLN1KpZR00Qn6EDpuqhPckyS3Rcnw1FWao2C3Q0OUOzXgxU/H+dBKZJRfoBx0+fE8SsBb/FrW8/1PBiQr6W1R4jnMaYFvHnsEbL+1cdkpTK+TZNFaUiLd9r2HFGi6Mzi0lWimlcU+4VEC2");
 
@@ -466,6 +467,53 @@ Run("service enumeration rejects malformed native buffers", () =>
     catch (TargetInvocationException exception) when (exception.InnerException is ServiceInspectionException serviceException)
     {
         Assert(serviceException.NativeErrorCode == 87, "Malformed service data did not preserve ERROR_INVALID_PARAMETER.");
+    }
+});
+
+Run("service dependency parser bounds and snapshots MULTI_SZ data", () =>
+{
+    var parser = typeof(ServiceInspector).GetMethod("ReadDependencies", BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new InvalidOperationException("The internal service dependency parser was unavailable.");
+    var buffer = new byte[128];
+    System.Text.Encoding.Unicode.GetBytes("RpcSs\0+LoadGroup\0\0").CopyTo(buffer, 16);
+    var pin = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+    try
+    {
+        var start = pin.AddrOfPinnedObject();
+        var dependencies = (IReadOnlyList<ServiceDependencyInfo>)(parser.Invoke(null, new object[] { start + 16, start, buffer.Length, "fixture" })
+            ?? throw new InvalidOperationException("The dependency parser returned null."));
+        Assert(dependencies.Count == 2 && dependencies[0].RawName == "RpcSs" && dependencies[1].IsLoadOrderGroup && dependencies[1].Name == "LoadGroup", "The MULTI_SZ dependency values were parsed incorrectly.");
+        AssertCollectionSnapshot(dependencies, "parsed service dependencies");
+    }
+    finally
+    {
+        pin.Free();
+    }
+});
+
+Run("service dependency parser rejects unterminated MULTI_SZ data", () =>
+{
+    var parser = typeof(ServiceInspector).GetMethod("ReadDependencies", BindingFlags.NonPublic | BindingFlags.Static)
+        ?? throw new InvalidOperationException("The internal service dependency parser was unavailable.");
+    var buffer = new byte[16];
+    for (var index = 0; index < buffer.Length; index += sizeof(char)) buffer[index] = (byte)'A';
+    var pin = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+    try
+    {
+        var start = pin.AddrOfPinnedObject();
+        try
+        {
+            _ = parser.Invoke(null, new object[] { start, start, buffer.Length, "fixture" });
+            throw new InvalidOperationException("An unterminated MULTI_SZ unexpectedly parsed.");
+        }
+        catch (TargetInvocationException exception) when (exception.InnerException is ServiceInspectionException serviceException)
+        {
+            Assert(serviceException.NativeErrorCode == 87, "Unterminated MULTI_SZ data did not preserve ERROR_INVALID_PARAMETER.");
+        }
+    }
+    finally
+    {
+        pin.Free();
     }
 });
 

@@ -18,7 +18,7 @@ The implementation begins with a 64 KiB page, permits required page growth only 
 
 ## Configuration
 
-`QueryServiceConfigW` uses its documented two-call sizing pattern and rejects a requested configuration buffer over 8 KiB. `ServiceConfigurationInfo` preserves the exact binary-path string returned by Windows, including arguments; it does not normalize, expand, or execute it. Null pointers and empty strings remain distinct. Dependencies are parsed from the native double-null-terminated list, retaining a raw `+group` dependency and exposing its group meaning separately.
+`QueryServiceConfigW` uses its documented two-call sizing pattern and rejects a requested configuration buffer over 8 KiB. Its `pcbBytesNeeded` output is consulted only for the expected insufficient-buffer result. `ServiceConfigurationInfo` preserves the exact binary-path string returned by Windows, including quotes, arguments, environment variables, and unusual syntax; it does not normalize, expand, split, or execute it. Null pointers and empty strings remain distinct. Dependencies are parsed from the native double-null-terminated list, retaining a raw `+group` dependency and exposing its group meaning separately.
 
 Start type, error control, and service type expose both a managed interpretation and the original numeric value. This is metadata, not a claim that a service is safe, trusted, active, or malicious.
 

@@ -150,14 +150,11 @@ public sealed class ServiceInspector
         {
             fixed (byte* bytes = buffer)
             {
-                if (!ServiceNative.QueryServiceConfig(service, (nint)bytes, bytesNeeded, out var returnedBytes))
+                // pcbBytesNeeded is documented only for ERROR_INSUFFICIENT_BUFFER;
+                // the successful call is bounded by the previously validated allocation.
+                if (!ServiceNative.QueryServiceConfig(service, (nint)bytes, bytesNeeded, out _))
                 {
                     throw LastError(nameof(ServiceNative.QueryServiceConfig), serviceName);
-                }
-
-                if (returnedBytes > bytesNeeded)
-                {
-                    throw new ServiceInspectionException(nameof(ServiceNative.QueryServiceConfig), serviceName, ErrorInvalidParameter);
                 }
             }
         }

@@ -12,6 +12,8 @@ internal static partial class RawServiceInspection
     private const uint ServiceStateAll = 0x00000003;
     private const int ErrorMoreData = 234;
     private const int ErrorInsufficientBuffer = 122;
+    private const int ErrorInvalidParameter = 87;
+    private const int MaximumConfigurationBufferLength = 8 * 1024;
 
     internal static string DescribeFirstServiceConfiguration()
     {
@@ -31,8 +33,13 @@ internal static partial class RawServiceInspection
                     throw new Win32Exception(Marshal.GetLastPInvokeError());
                 }
 
+                if (returned == 0)
+                {
+                    throw new Win32Exception(ErrorInvalidParameter, "The SCM returned no service records.");
+                }
+
                 var first = Marshal.PtrToStructure<EnumServiceStatusProcessRaw>(page);
-                var serviceName = Marshal.PtrToStringUni(first.ServiceName) ?? throw new Win32Exception("The first service name was null.");
+                var serviceName = ReadUnicodeString(first.ServiceName, page, pageLength, required: true, "The first service name was invalid.")!;
                 var service = OpenService(manager, serviceName, ServiceQueryConfig);
                 if (service == nint.Zero) throw new Win32Exception(Marshal.GetLastPInvokeError());
 
@@ -43,16 +50,22 @@ internal static partial class RawServiceInspection
                         throw new Win32Exception(Marshal.GetLastPInvokeError());
                     }
 
+                    if (required > MaximumConfigurationBufferLength)
+                    {
+                        throw new Win32Exception(ErrorInvalidParameter, "QueryServiceConfigW reported a size above its documented maximum.");
+                    }
+
                     var configurationBuffer = Marshal.AllocHGlobal(checked((int)required));
                     try
                     {
-                        if (!QueryServiceConfig(service, configurationBuffer, required, out var returnedBytes) || returnedBytes > required)
+                        if (!QueryServiceConfig(service, configurationBuffer, required, out _))
                         {
                             throw new Win32Exception(Marshal.GetLastPInvokeError());
                         }
 
                         var configuration = Marshal.PtrToStructure<QueryServiceConfigRaw>(configurationBuffer);
-                        return $"{serviceName}: start={configuration.StartType}, path={Marshal.PtrToStringUni(configuration.BinaryPathName) ?? "<null>"}";
+                        var binaryPath = ReadUnicodeString(configuration.BinaryPathName, configurationBuffer, checked((int)required), required: false, "The binary-path pointer was invalid.");
+                        return $"{serviceName}: start={configuration.StartType}, path={binaryPath ?? "<null>"}";
                     }
                     finally { Marshal.FreeHGlobal(configurationBuffer); }
                 }
@@ -97,6 +110,32 @@ internal static partial class RawServiceInspection
         internal nint Dependencies;
         internal nint ServiceStartName;
         internal nint DisplayName;
+    }
+
+    private static unsafe string? ReadUnicodeString(nint pointer, nint bufferStart, int bufferLength, bool required, string message)
+    {
+        if (pointer == nint.Zero)
+        {
+            if (!required) return null;
+            throw new Win32Exception(ErrorInvalidParameter, message);
+        }
+
+        var start = (nuint)bufferStart;
+        var end = checked(start + (uint)bufferLength);
+        var address = (nuint)pointer;
+        if (address < start || address >= end || ((address - start) & 1) != 0)
+        {
+            throw new Win32Exception(ErrorInvalidParameter, message);
+        }
+
+        var availableCharacters = (end - address) / sizeof(char);
+        var characters = (char*)pointer;
+        for (var index = 0; index < (int)availableCharacters; index++)
+        {
+            if (characters[index] == '\0') return new string(characters, 0, index);
+        }
+
+        throw new Win32Exception(ErrorInvalidParameter, message);
     }
 
     [LibraryImport("advapi32.dll", EntryPoint = "OpenSCManagerW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
