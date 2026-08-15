@@ -88,7 +88,9 @@ public sealed class ProcessInspector
     private static ProcessInfo InspectEntry(ProcessEntry32Native entry)
     {
         var name = entry.GetExecutableFileName();
-        var sessionId = TryGetSessionId(entry.ProcessId, out var sessionError);
+        var diagnostics = new ProcessInspectionDiagnosticsBuilder();
+        var sessionId = TryGetSessionId(entry.ProcessId, out var sessionDiagnostic);
+        diagnostics.SetSessionId(sessionDiagnostic);
 
         using var process = Kernel32Native.OpenProcess(
             ProcessAccessRights.QueryLimitedInformation,
@@ -98,6 +100,7 @@ public sealed class ProcessInspector
         if (process.IsInvalid)
         {
             var errorCode = Marshal.GetLastPInvokeError();
+            diagnostics.MarkExtendedQueriesNotAttempted();
             return new ProcessInfo(
                 entry.ProcessId,
                 entry.ParentProcessId,
@@ -106,13 +109,18 @@ public sealed class ProcessInspector
                 CreationTimeUtc: null,
                 sessionId,
                 Architecture: null,
-                InspectionErrorCode: sessionError ?? errorCode);
+                InspectionErrorCode: diagnostics.FirstNativeErrorCode ?? errorCode)
+            {
+                Diagnostics = diagnostics.Build(),
+            };
         }
 
-        int? inspectionError = sessionError;
-        var executablePath = TryGetExecutablePath(process, ref inspectionError);
-        var creationTime = TryGetCreationTime(process, ref inspectionError);
-        var architecture = TryGetArchitecture(process, ref inspectionError);
+        var executablePath = TryGetExecutablePath(process, out var imagePathDiagnostic);
+        diagnostics.SetImagePath(imagePathDiagnostic);
+        var creationTime = TryGetCreationTime(process, out var creationTimeDiagnostic);
+        diagnostics.SetCreationTime(creationTimeDiagnostic);
+        var architecture = TryGetArchitecture(process, out var architectureDiagnostic);
+        diagnostics.SetArchitecture(architectureDiagnostic);
 
         return new ProcessInfo(
             entry.ProcessId,
@@ -122,22 +130,25 @@ public sealed class ProcessInspector
             creationTime,
             sessionId,
             architecture,
-            inspectionError);
+            diagnostics.FirstNativeErrorCode)
+        {
+            Diagnostics = diagnostics.Build(),
+        };
     }
 
-    private static uint? TryGetSessionId(uint processId, out int? errorCode)
+    private static uint? TryGetSessionId(uint processId, out ProcessQueryDiagnostic diagnostic)
     {
         if (Kernel32Native.ProcessIdToSessionId(processId, out var sessionId))
         {
-            errorCode = null;
+            diagnostic = ProcessQueryDiagnostic.Succeeded;
             return sessionId;
         }
 
-        errorCode = Marshal.GetLastPInvokeError();
+        diagnostic = ProcessQueryDiagnostic.Failed(Marshal.GetLastPInvokeError());
         return null;
     }
 
-    private static unsafe string? TryGetExecutablePath(SafeProcessHandle process, ref int? inspectionError)
+    private static unsafe string? TryGetExecutablePath(SafeProcessHandle process, out ProcessQueryDiagnostic diagnostic)
     {
         var buffer = new char[MaximumExtendedPathLength];
 
@@ -147,32 +158,35 @@ public sealed class ProcessInspector
 
             if (Kernel32Native.QueryFullProcessImageName(process, ImageFileNameWin32Path, path, ref pathLength))
             {
+                diagnostic = ProcessQueryDiagnostic.Succeeded;
                 return new string(buffer, 0, checked((int)pathLength));
             }
         }
 
-        CaptureLastError(ref inspectionError);
+        diagnostic = ProcessQueryDiagnostic.Failed(Marshal.GetLastPInvokeError());
         return null;
     }
 
-    private static DateTimeOffset? TryGetCreationTime(SafeProcessHandle process, ref int? inspectionError)
+    private static DateTimeOffset? TryGetCreationTime(SafeProcessHandle process, out ProcessQueryDiagnostic diagnostic)
     {
         if (!Kernel32Native.GetProcessTimes(process, out var creationTime, out _, out _, out _))
         {
-            CaptureLastError(ref inspectionError);
+            diagnostic = ProcessQueryDiagnostic.Failed(Marshal.GetLastPInvokeError());
             return null;
         }
 
+        diagnostic = ProcessQueryDiagnostic.Succeeded;
         return new DateTimeOffset(DateTime.FromFileTimeUtc(creationTime.ToInt64()));
     }
 
-    private static ProcessArchitectureInfo? TryGetArchitecture(SafeProcessHandle process, ref int? inspectionError)
+    private static ProcessArchitectureInfo? TryGetArchitecture(SafeProcessHandle process, out ProcessQueryDiagnostic diagnostic)
     {
         try
         {
             if (Kernel32Native.IsWow64Process2(process, out var processMachine, out var nativeMachine))
             {
                 var isWow64 = processMachine != ImageFileMachineUnknown;
+                diagnostic = ProcessQueryDiagnostic.Succeeded;
                 return new ProcessArchitectureInfo(
                     isWow64 ? MapArchitecture(processMachine) : MapArchitecture(nativeMachine),
                     MapArchitecture(nativeMachine),
@@ -183,7 +197,7 @@ public sealed class ProcessInspector
 
             if (errorCode != Kernel32Native.ErrorCallNotImplemented)
             {
-                inspectionError ??= errorCode;
+                diagnostic = ProcessQueryDiagnostic.Failed(errorCode);
                 return null;
             }
         }
@@ -194,11 +208,12 @@ public sealed class ProcessInspector
 
         if (!Kernel32Native.IsWow64Process(process, out var wow64Process))
         {
-            CaptureLastError(ref inspectionError);
+            diagnostic = ProcessQueryDiagnostic.Failed(Marshal.GetLastPInvokeError());
             return null;
         }
 
         var nativeArchitecture = MapArchitecture(RuntimeInformation.OSArchitecture);
+        diagnostic = ProcessQueryDiagnostic.Succeeded;
         return new ProcessArchitectureInfo(
             wow64Process != 0 ? ProcessArchitecture.X86 : nativeArchitecture,
             nativeArchitecture,
@@ -223,9 +238,6 @@ public sealed class ProcessInspector
         Architecture.Arm64 => ProcessArchitecture.Arm64,
         _ => ProcessArchitecture.Unknown,
     };
-
-    private static void CaptureLastError(ref int? inspectionError) =>
-        inspectionError ??= Marshal.GetLastPInvokeError();
 
     private static ProcessInspectionException CreateLastErrorException(string operation) =>
         new(operation, Marshal.GetLastPInvokeError());

@@ -47,6 +47,18 @@ The Kernel32 APIs in this module return either `BOOL` or `INVALID_HANDLE_VALUE`,
 
 An access-denied extended query does not remove the Toolhelp entry. It is represented by missing optional fields and `InspectionErrorCode`, rather than being silently treated as success.
 
+## Process diagnostics
+
+Each optional query—image path, creation time, session ID, and architecture—can fail independently on protected, elevated, short-lived, or cross-user processes. These outcomes are not enumeration exceptions: Toolhelp data remains useful and the inspector continues with every remaining safe query.
+
+`ProcessInfo.InspectionErrorCode` remains the first native partial-query failure for backwards compatibility. `ProcessInfo.Diagnostics` is null when all four queries succeed; otherwise it provides immutable per-query `ProcessQueryDiagnostic` values:
+
+- `Success`: the query completed.
+- `Failed`: the query was attempted and preserves its individual Win32 error code and message.
+- `NotAttempted`: the query could not be reached, for example because `OpenProcess` could not acquire the query-limited handle. It has no invented native error code.
+
+Diagnostics add detail without changing existing process enumeration, optional result fields, or exception behavior.
+
 ## x86, x64, and WOW64
 
 `PROCESSENTRY32W` contains a pointer-sized `ULONG_PTR`, represented as `nuint`; its native layout therefore remains correct for x86 and x64. `IsWow64Process2` distinguishes the target process architecture from the native operating-system architecture. `QueryFullProcessImageNameW` is also suitable for retrieving image names across 32-bit/64-bit boundaries.

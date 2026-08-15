@@ -14,7 +14,16 @@ foreach (var process in inspector.EnumerateProcesses().OrderBy(process => proces
         $"{process.SessionId?.ToString() ?? "<denied>",-8} " +
         $"{process.Architecture?.ProcessArchitecture.ToString() ?? "<denied>",-13} " +
         $"{process.Name,-28} {process.ExecutablePath ?? "<access denied or unavailable>"}");
+
+    if (process.Diagnostics is { } diagnostics)
+    {
+        Console.WriteLine($"  Diagnostics: image={Describe(diagnostics.ImagePath)}, creation={Describe(diagnostics.CreationTime)}, session={Describe(diagnostics.SessionId)}, architecture={Describe(diagnostics.Architecture)}");
+    }
 }
 
 Console.WriteLine();
 Console.WriteLine($"Raw LibraryImport example (QueryFullProcessImageNameW): {RawCurrentProcessPath.Get()}");
+
+static string Describe(ProcessQueryDiagnostic diagnostic) => diagnostic.Status == ProcessQueryStatus.Failed
+    ? $"Failed ({diagnostic.NativeErrorCode})"
+    : diagnostic.Status.ToString();

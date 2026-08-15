@@ -193,6 +193,7 @@ The module targets Windows and uses Unicode Netapi32 APIs available since Window
 | Processes | `GetProcessTimes` | Yes | Indirectly | Yes |
 | Processes | `ProcessIdToSessionId` | Yes | Indirectly | Yes |
 | Processes | `IsWow64Process2` with compatibility fallback | Yes | Yes | Yes |
+| Processes | Per-query partial diagnostics for image path, creation time, session, and architecture | Yes | Yes | Yes |
 | Threads | `CreateToolhelp32Snapshot` with `TH32CS_SNAPTHREAD` | Yes | Yes | Yes |
 | Threads | `Thread32First`, `Thread32Next`, `THREADENTRY32` | Yes | Yes | Yes |
 | Modules | `CreateToolhelp32Snapshot` with module flags | Yes | Yes | Yes |

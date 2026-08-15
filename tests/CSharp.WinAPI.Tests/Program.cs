@@ -63,6 +63,7 @@ Run("current process has core inspection data", () =>
     Assert(process.CreationTimeUtc is not null, "The current process had no creation time.");
     Assert(process.SessionId is not null, "The current process had no session ID.");
     Assert(process.Architecture is not null, "The current process architecture was unavailable.");
+    Assert(process.Diagnostics is null, "A fully inspected current process unexpectedly had diagnostics.");
 });
 
 Run("invalid process IDs are reported", () =>
@@ -84,7 +85,71 @@ Run("process inspection can be repeated without retaining handles", () =>
     {
         var processes = processInspector.EnumerateProcesses();
         Assert(processes.Count > 0, "Process enumeration returned no entries.");
+        Assert(processes.First(process => process.ProcessId == (uint)Environment.ProcessId).Diagnostics is null, "Repeated current-process inspection unexpectedly produced diagnostics.");
     }
+});
+
+Run("process diagnostics are null when every optional query succeeds", () =>
+{
+    var diagnostics = new ProcessInspectionDiagnosticsBuilder();
+    diagnostics.SetSessionId(ProcessQueryDiagnostic.Succeeded);
+    diagnostics.SetImagePath(ProcessQueryDiagnostic.Succeeded);
+    diagnostics.SetCreationTime(ProcessQueryDiagnostic.Succeeded);
+    diagnostics.SetArchitecture(ProcessQueryDiagnostic.Succeeded);
+    Assert(diagnostics.FirstNativeErrorCode is null && diagnostics.Build() is null, "All-success process diagnostics were not omitted.");
+});
+
+Run("process diagnostics preserve an image-path failure and first-error compatibility", () =>
+{
+    var diagnostics = new ProcessInspectionDiagnosticsBuilder();
+    diagnostics.SetSessionId(ProcessQueryDiagnostic.Succeeded);
+    diagnostics.SetImagePath(ProcessQueryDiagnostic.Failed(5));
+    diagnostics.SetCreationTime(ProcessQueryDiagnostic.Succeeded);
+    diagnostics.SetArchitecture(ProcessQueryDiagnostic.Succeeded);
+    var result = diagnostics.Build()!;
+    var process = new ProcessInfo(1, 0, "fixture", null, null, null, null, diagnostics.FirstNativeErrorCode)
+    {
+        Diagnostics = result,
+    };
+    Assert(diagnostics.FirstNativeErrorCode == 5, "The first image-path error was not preserved.");
+    Assert(process.InspectionErrorCode == 5 && process.Diagnostics == result, "ProcessInfo did not preserve the legacy first error alongside diagnostics.");
+    Assert(result.ImagePath.Status == ProcessQueryStatus.Failed && result.ImagePath.NativeErrorCode == 5, "The image-path diagnostic lost its native error.");
+    Assert(result.CreationTime.Status == ProcessQueryStatus.Success && result.SessionId.Status == ProcessQueryStatus.Success && result.Architecture.Status == ProcessQueryStatus.Success, "Independent successful process queries were not retained.");
+});
+
+Run("process diagnostics preserve an architecture failure independently", () =>
+{
+    var diagnostics = new ProcessInspectionDiagnosticsBuilder();
+    diagnostics.SetSessionId(ProcessQueryDiagnostic.Succeeded);
+    diagnostics.SetImagePath(ProcessQueryDiagnostic.Succeeded);
+    diagnostics.SetCreationTime(ProcessQueryDiagnostic.Succeeded);
+    diagnostics.SetArchitecture(ProcessQueryDiagnostic.Failed(50));
+    var result = diagnostics.Build()!;
+    Assert(diagnostics.FirstNativeErrorCode == 50, "The architecture failure did not set the compatibility error.");
+    Assert(result.Architecture.Status == ProcessQueryStatus.Failed && result.Architecture.NativeErrorCode == 50, "The architecture diagnostic lost its native error.");
+});
+
+Run("process diagnostics retain multiple failures in query order", () =>
+{
+    var diagnostics = new ProcessInspectionDiagnosticsBuilder();
+    diagnostics.SetSessionId(ProcessQueryDiagnostic.Failed(5));
+    diagnostics.SetImagePath(ProcessQueryDiagnostic.Failed(87));
+    diagnostics.SetCreationTime(ProcessQueryDiagnostic.Failed(6));
+    diagnostics.SetArchitecture(ProcessQueryDiagnostic.Failed(50));
+    var result = diagnostics.Build()!;
+    Assert(diagnostics.FirstNativeErrorCode == 5, "The first query failure no longer matches InspectionErrorCode compatibility semantics.");
+    Assert(result.SessionId.NativeErrorCode == 5 && result.ImagePath.NativeErrorCode == 87 && result.CreationTime.NativeErrorCode == 6 && result.Architecture.NativeErrorCode == 50, "Multiple independent process errors were not retained.");
+});
+
+Run("process diagnostics distinguish unattempted queries without handles or mutable state", () =>
+{
+    var diagnostics = new ProcessInspectionDiagnosticsBuilder();
+    diagnostics.SetSessionId(ProcessQueryDiagnostic.Succeeded);
+    diagnostics.MarkExtendedQueriesNotAttempted();
+    var result = diagnostics.Build()!;
+    Assert(result.ImagePath.Status == ProcessQueryStatus.NotAttempted && result.CreationTime.Status == ProcessQueryStatus.NotAttempted && result.Architecture.Status == ProcessQueryStatus.NotAttempted, "Unattempted process queries were not represented distinctly.");
+    Assert(result.ImagePath.NativeErrorCode is null && result.CreationTime.NativeErrorCode is null && result.Architecture.NativeErrorCode is null, "An unattempted query exposed an invented native error.");
+    Assert(typeof(ProcessInspectionDiagnostics).GetProperties().All(property => !typeof(System.Collections.IList).IsAssignableFrom(property.PropertyType)), "Process diagnostics exposed mutable collection state.");
 });
 
 var tokenInspector = new TokenInspector();

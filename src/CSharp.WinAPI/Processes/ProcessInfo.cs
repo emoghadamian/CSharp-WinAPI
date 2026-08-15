@@ -11,6 +11,9 @@ public sealed record ProcessInfo(
     ProcessArchitectureInfo? Architecture,
     int? InspectionErrorCode)
 {
+    /// <summary>Gets independent optional-query outcomes, or null when every query succeeded.</summary>
+    public ProcessInspectionDiagnostics? Diagnostics { get; init; }
+
     /// <summary>Whether every requested extended query completed without a Win32 error.</summary>
     public bool HasCompleteExtendedInformation => InspectionErrorCode is null;
 }
