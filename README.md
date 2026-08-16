@@ -286,4 +286,4 @@ Keep raw interop, managed wrappers, examples, tests, and documentation separate.
 
 ## 📄 License
 
-No license file is currently present. Add an explicit license before distributing or accepting external contributions.
+This project is licensed under the [MIT License](LICENSE).
