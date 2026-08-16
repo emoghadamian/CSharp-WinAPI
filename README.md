@@ -33,6 +33,8 @@ See [DllImport vs LibraryImport](docs/interop/dllimport-vs-libraryimport.md).
 
 The projects are AnyCPU and do not pin a runtime identifier. Interop models use pointer-sized managed types only for native pointer-sized fields, while PE parsing uses the widths defined by the file format. The solution is compiled with x64, x86, and ARM64 `PlatformTarget` settings. That is compile-time evidence only: runtime behavior must be validated on a matching Windows host and caller bitness. Module and virtual-memory inspection retain the documented cross-bitness limits described in their feature documentation.
 
+GitHub Actions runs this build matrix on Windows. The integration suite runs on the x64 Windows runner; x86 and ARM64 coverage is build-only and does not claim runtime validation.
+
 ## ⚙️ Win32 APIs
 
 The first module uses `Netapi32.dll`:

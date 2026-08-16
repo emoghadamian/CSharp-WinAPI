@@ -12,3 +12,13 @@ TestResults/
 # NuGet
 packages/
 *.nupkg
+
+# Security-sensitive local material
+.env
+.env.*
+*.pfx
+*.p12
+*.key
+*.pem
+*.cer
+*.crt

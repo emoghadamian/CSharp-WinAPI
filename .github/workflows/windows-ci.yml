@@ -1,0 +1,38 @@
+name: Windows CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build (${{ matrix.platform }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [x64, x86, ARM64]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore dependencies
+        run: dotnet restore CSharp-WinAPI.sln
+
+      - name: Build solution
+        run: dotnet build CSharp-WinAPI.sln --configuration Debug --no-restore -p:PlatformTarget=${{ matrix.platform }}
+
+      - name: Run integration suite (x64 runner)
+        if: matrix.platform == 'x64'
+        run: dotnet run --project tests/CSharp.WinAPI.Tests/CSharp.WinAPI.Tests.csproj --configuration Debug --no-build
